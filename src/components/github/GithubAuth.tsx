@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Github, Loader2, AlertCircle } from 'lucide-react';
+import { Github, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -37,22 +37,6 @@ export const GithubAuth: React.FC = () => {
     }
   };
 
-  const handleOAuthLogin = () => {
-    const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
-    const redirectUri = import.meta.env.VITE_GITHUB_REDIRECT_URI || 
-      `${window.location.origin}/auth/callback`;
-    
-    if (!clientId) {
-      setError('OAuth não configurado. Use autenticação por token.');
-      return;
-    }
-
-    const scopes = ['repo', 'read:user', 'user:email'].join(' ');
-    const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scopes}`;
-    
-    window.location.href = authUrl;
-  };
-
   return (
     <div className="flex items-center justify-center min-h-screen bg-lore-black p-4">
       <Card className="p-8 max-w-md w-full" glow>
@@ -64,49 +48,31 @@ export const GithubAuth: React.FC = () => {
             LORE <span className="text-gradient">IA</span>
           </h1>
           <p className="text-gray-400">
-            Conecte sua conta GitHub para começar
+            Digite seu token do GitHub para começar
           </p>
         </div>
 
         <div className="space-y-4">
-          <Button
-            className="w-full"
-            size="lg"
-            icon={Github}
-            onClick={handleOAuthLogin}
-            loading={loading}
-          >
-            Conectar com OAuth
-          </Button>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/10" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-lore-dark px-2 text-gray-500">
-                ou use token
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Input
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">
+              Personal Access Token
+            </label>
+            <input
               type="password"
               placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
-              label="Personal Access Token"
+              className="w-full bg-white/5 border border-white/10 rounded-lg py-2 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-lore-purple/50"
             />
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={handleTokenAuth}
-              loading={loading}
-            >
-              Autenticar com Token
-            </Button>
           </div>
+          
+          <button
+            onClick={handleTokenAuth}
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-lore-purple to-lore-violet text-white font-medium py-2 px-4 rounded-lg hover:shadow-lg hover:shadow-lore-purple/30 transition-all duration-200 disabled:opacity-50"
+          >
+            {loading ? 'Autenticando...' : 'Autenticar'}
+          </button>
 
           {error && (
             <div className="flex items-center space-x-2 text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
@@ -116,7 +82,7 @@ export const GithubAuth: React.FC = () => {
           )}
 
           <p className="text-xs text-gray-500 text-center">
-            Seu token é armazenado apenas no seu navegador e nunca é enviado para nossos servidores
+            Token armazenado apenas no seu navegador
           </p>
         </div>
       </Card>
