@@ -145,3 +145,5 @@ export const ProjectView: React.FC = () => {
     try {
       // Analisar prompt e gerar modificações
       const context
+        );
+};
