@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "name": "lore-ia",
   "builds": [
     {
       "src": "package.json",
@@ -7,9 +8,17 @@
       "config": {
         "distDir": "dist"
       }
+    },
+    {
+      "src": "api/**/*.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
     {
       "src": "/(.*)",
       "dest": "/index.html"
@@ -17,6 +26,7 @@
   ],
   "env": {
     "VITE_GITHUB_CLIENT_ID": "@github-client-id",
-    "VITE_GITHUB_REDIRECT_URI": "@github-redirect-uri"
+    "VITE_GITHUB_REDIRECT_URI": "@github-redirect-uri",
+    "GITHUB_CLIENT_SECRET": "@github-client-secret"
   }
 }
