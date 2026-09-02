@@ -7,7 +7,6 @@ import {
   GitCompare,
   GitCommit,
   RefreshCw,
-  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -69,11 +68,9 @@ export const ProjectView: React.FC = () => {
     try {
       const [owner, repoName] = repo.fullName.split('/');
       
-      // Carregar árvore de arquivos
       const tree = await githubService.getFileTree(owner, repoName, selectedBranch);
       setFileTree(tree);
 
-      // Analisar projeto
       const info = projectAnalyzer.analyzeProject(tree, repoName);
       setProjectInfo(info);
       
@@ -110,7 +107,6 @@ export const ProjectView: React.FC = () => {
       const content = await githubService.getFileContent(owner, repoName, path, selectedBranch);
       setFileContent(content);
       
-      // Atualizar arquivos abertos
       const newOpenFiles = new Map(openFiles);
       newOpenFiles.set(path, {
         path,
@@ -143,7 +139,315 @@ export const ProjectView: React.FC = () => {
     setIsAnalyzing(true);
 
     try {
-      // Analisar prompt e gerar modificações
-      const context
-        );
+      const context: AIContext = {
+        projectInfo,
+        conversation: messages,
+        relevantFiles: [],
+      };
+
+      const response = await aiEngine.generateModification(prompt, context);
+      
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: response.explanation,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+
+      const fileChanges: FileChange[] = response.modifications.map(mod => ({
+        path: mod.path,
+        content: mod.newContent || '',
+        originalContent: fileContent,
+        status: mod.action === 'create' ? 'added' : mod.action === 'delete' ? 'deleted' : 'modified',
+      }));
+
+      setChanges(fileChanges);
+      const newDiffs = diffEngine.compareFiles(fileChanges);
+      setDiffs(newDiffs);
+      setDiffPanelOpen(true);
+      
+      if (isMobile) {
+        setMobileView('diff');
+      }
+    } catch (err) {
+      console.error('Erro ao processar prompt:', err);
+      setToast({
+        message: 'Erro ao processar solicitação',
+        type: 'error',
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleApplyChanges = async () => {
+    if (!selectedRepo || changes.length === 0) return;
+
+    setShowCommitModal(true);
+    setDiffPanelOpen(false);
+  };
+
+  const handleCommit = async (message: string) => {
+    if (!selectedRepo) return;
+
+    setCommitLoading(true);
+    try {
+      const [owner, repoName] = selectedRepo.fullName.split('/');
+      
+      const commitChanges = changes.map(change => ({
+        path: change.path,
+        content: change.content,
+        mode: change.status === 'added' ? 'create' as const : 
+              change.status === 'deleted' ? 'delete' as const : 'update' as const,
+      }));
+
+      const commitSha = await githubService.createCommit(
+        owner,
+        repoName,
+        selectedBranch,
+        message,
+        commitChanges
+      );
+
+      setToast({
+        message: `Commit criado: ${commitSha.substring(0, 7)}`,
+        type: 'success',
+      });
+
+      await loadProject(selectedRepo);
+      setChanges([]);
+      setDiffs(new Map());
+    } catch (err) {
+      console.error('Erro ao criar commit:', err);
+      setToast({
+        message: 'Erro ao criar commit',
+        type: 'error',
+      });
+    } finally {
+      setCommitLoading(false);
+      setShowCommitModal(false);
+    }
+  };
+
+  const handleEditorChange = (value: string) => {
+    setFileContent(value);
+    
+    if (activeFile) {
+      const newOpenFiles = new Map(openFiles);
+      const file = newOpenFiles.get(activeFile);
+      if (file) {
+        file.content = value;
+        newOpenFiles.set(activeFile, file);
+        setOpenFiles(newOpenFiles);
+      }
+    }
+  };
+
+  if (!selectedRepo) {
+    return (
+      <div className="h-full flex items-center justify-center p-4">
+        <RepoSelector onSelectRepo={setSelectedRepo} />
+      </div>
+    );
+  }
+
+  if (loadingTree) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center">
+          <Spinner size="lg" className="mb-4" />
+          <p className="text-gray-400">Carregando projeto...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="h-14 bg-lore-dark border-b border-white/10 flex items-center justify-between px-4">
+        <div className="flex items-center space-x-3">
+          <FolderOpen className="w-5 h-5 text-lore-purple" />
+          <h2 className="font-semibold">{selectedRepo.name}</h2>
+          <span className="text-sm text-gray-500">{selectedBranch}</span>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={RefreshCw}
+            onClick={() => loadProject(selectedRepo)}
+            title="Recarregar projeto"
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={GitCommit}
+            onClick={() => setShowCommitModal(true)}
+            title="Ver commits"
+          />
+        </div>
+      </div>
+
+      {isMobile ? (
+        <div className="flex-1 overflow-hidden">
+          {mobileView === 'files' && (
+            <div className="h-full overflow-y-auto">
+              <FileTree
+                tree={fileTree}
+                activeFile={activeFile}
+                onFileSelect={handleFileSelect}
+              />
+            </div>
+          )}
+          {mobileView === 'editor' && (
+            <div className="h-full flex flex-col">
+              {activeFile ? (
+                <>
+                  <div className="h-10 bg-lore-dark border-b border-white/10 flex items-center px-3">
+                    <Code className="w-4 h-4 text-lore-purple mr-2" />
+                    <span className="text-sm truncate">{activeFile}</span>
+                  </div>
+                  <div className="flex-1">
+                    {loadingFile ? (
+                      <div className="h-full flex items-center justify-center">
+                        <Spinner />
+                      </div>
+                    ) : (
+                      <CodeEditor
+                        filename={activeFile}
+                        content={fileContent}
+                        onChange={handleEditorChange}
+                      />
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500">
+                  Selecione um arquivo para editar
+                </div>
+              )}
+            </div>
+          )}
+          {mobileView === 'ai' && (
+            <div className="h-full flex flex-col">
+              <div className="flex-1 overflow-y-auto p-4">
+                <AIResponse messages={messages} loading={isAnalyzing} />
+                <AnalysisProgress isAnalyzing={isAnalyzing} />
+              </div>
+              <PromptInput
+                onSubmit={handlePromptSubmit}
+                loading={isAnalyzing}
+                disabled={!projectInfo}
+              />
+            </div>
+          )}
+          {mobileView === 'diff' && diffPanelOpen && (
+            <div className="h-full">
+              <DiffViewer
+                diffs={diffs}
+                onApply={handleApplyChanges}
+                onCancel={() => setDiffPanelOpen(false)}
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 flex overflow-hidden">
+          <div className="w-64 border-r border-white/10 overflow-y-auto">
+            <div className="p-3 border-b border-white/10">
+              <h3 className="text-sm font-semibold text-gray-400">Arquivos</h3>
+            </div>
+            <FileTree
+              tree={fileTree}
+              activeFile={activeFile}
+              onFileSelect={handleFileSelect}
+            />
+          </div>
+
+          <div className="flex-1 flex flex-col">
+            {activeFile ? (
+              <>
+                <div className="h-10 bg-lore-dark border-b border-white/10 flex items-center px-3">
+                  <Code className="w-4 h-4 text-lore-purple mr-2" />
+                  <span className="text-sm truncate">{activeFile}</span>
+                </div>
+                <div className="flex-1">
+                  {loadingFile ? (
+                    <div className="h-full flex items-center justify-center">
+                      <Spinner />
+                    </div>
+                  ) : (
+                    <CodeEditor
+                      filename={activeFile}
+                      content={fileContent}
+                      onChange={handleEditorChange}
+                    />
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-500">
+                Selecione um arquivo para editar
+              </div>
+            )}
+          </div>
+
+          <div className="w-96 border-l border-white/10 flex flex-col">
+            <div className="p-3 border-b border-white/10">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-400 flex items-center">
+                  <Sparkles className="w-4 h-4 text-lore-purple mr-2" />
+                  LORE IA
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={GitCompare}
+                  onClick={() => setDiffPanelOpen(!diffPanelOpen)}
+                  title="Ver alterações"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              {diffPanelOpen ? (
+                <DiffViewer
+                  diffs={diffs}
+                  onApply={handleApplyChanges}
+                  onCancel={() => setDiffPanelOpen(false)}
+                />
+              ) : (
+                <>
+                  <AIResponse messages={messages} loading={isAnalyzing} />
+                  <AnalysisProgress isAnalyzing={isAnalyzing} />
+                </>
+              )}
+            </div>
+            {!diffPanelOpen && (
+              <PromptInput
+                onSubmit={handlePromptSubmit}
+                loading={isAnalyzing}
+                disabled={!projectInfo}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      <CommitModal
+        isOpen={showCommitModal}
+        onClose={() => setShowCommitModal(false)}
+        onCommit={handleCommit}
+        files={changes}
+        loading={commitLoading}
+      />
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </div>
+  );
 };
