@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const fullPrompt = systemPrompt + '\n\nPEDIDO DO USUÁRIO:\n' + prompt;
 
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=' + apiKey,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + apiKey,
       {
         method: 'POST',
         headers: {
@@ -64,4 +64,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: 'Não foi possível contactar o AI Engine. Verifique a configuração da API.' 
     });
   }
-      }
+          }
