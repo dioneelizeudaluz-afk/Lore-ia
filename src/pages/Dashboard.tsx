@@ -15,7 +15,6 @@ import {
   Loader2
 } from 'lucide-react';
 
-// Componente do Editor de Arquivos
 const FileEditor: React.FC<{
   filePath: string;
   fileName: string;
@@ -243,7 +242,6 @@ export const Dashboard: React.FC = () => {
   } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // AI Assistant states
   const [aiOpen, setAiOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiMessages, setAiMessages] = useState<any[]>([
@@ -254,6 +252,10 @@ export const Dashboard: React.FC = () => {
   ]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
+
+  const [modificationPlan, setModificationPlan] = useState<any>(null);
+  const [showDiff, setShowDiff] = useState(false);
+  const [applyingChanges, setApplyingChanges] = useState(false);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('github_token');
@@ -342,6 +344,8 @@ export const Dashboard: React.FC = () => {
       },
     ]);
     setAiOpen(false);
+    setModificationPlan(null);
+    setShowDiff(false);
   };
 
   const openRepository = (repo: any) => {
@@ -349,6 +353,8 @@ export const Dashboard: React.FC = () => {
     setShowFiles(false);
     setFileTree([]);
     setAiOpen(false);
+    setModificationPlan(null);
+    setShowDiff(false);
   };
 
   const loadFileTree = async () => {
@@ -474,7 +480,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  // AI Functions
   const analyzeProject = async () => {
     if (!selectedRepo) return null;
     
@@ -525,6 +530,7 @@ export const Dashboard: React.FC = () => {
           prompt: userMessage,
           context: context || { framework: 'unknown', structure: [] },
           conversation: aiMessages,
+          mode: 'analyze',
         }),
       });
 
@@ -536,18 +542,422 @@ export const Dashboard: React.FC = () => {
         setAiError(data.error || 'Erro ao contactar AI Engine');
         setAiMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: data.error || 'Não foi possível contactar o AI Engine. Verifique a configuração da API.' 
+          content: data.error || 'Não foi possível contactar o AI Engine.' 
         }]);
       }
     } catch (err) {
       setAiError('Erro ao contactar AI Engine');
       setAiMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Não foi possível contactar o AI Engine. Verifique a configuração da API.' 
+        content: 'Não foi possível contactar o AI Engine.' 
       }]);
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const generateModification = async () => {
+    if (!aiPrompt.trim() || aiLoading || !selectedRepo) return;
+    
+    const userMessage = aiPrompt.trim();
+    setAiPrompt('');
+    setAiMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setAiLoading(true);
+    setAiError('');
+
+    try {
+      const context = await analyzeProject();
+      
+      const githubToken = localStorage.getItem('github_token');
+      const fileContents: Record<string, string> = {};
+      
+      if (context) {
+        const filesToRead = [
+          ...(context.pages || []).slice(0, 3),
+          ...(context.components || []).slice(0, 5),
+          ...(context.styles || []).slice(0, 3),
+        ];
+
+        for (const filePath of filesToRead) {
+          try {
+            const response = await fetch(
+              `https://api.github.com/repos/${selectedRepo.full_name}/contents/${filePath}?ref=${selectedRepo.default_branch}`,
+              {
+                headers: {
+                  'Authorization': `token ${githubToken}`,
+                  'Accept': 'application/vnd.github.v3+json',
+                },
+              }
+            );
+            if (response.ok) {
+              const data = await response.json();
+              if (data.content) {
+                fileContents[filePath] = atob(data.content.replace(/\n/g, ''));
+              }
+            }
+          } catch (err) {
+            // Skip file
+          }
+        }
+      }
+
+      const response = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: userMessage,
+          context: { ...(context || {}), fileContents },
+          conversation: aiMessages,
+          mode: 'modify',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.response) {
+        try {
+          const cleaned = data.response.replace(/```json/gi, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+          
+          if (parsed.files && Array.isArray(parsed.files)) {
+            setModificationPlan(parsed);
+            setShowDiff(true);
+            setAiMessages(prev => [...prev, { 
+              role: 'assistant', 
+              content: `Plano gerado! ${parsed.summary || ''}\n\n${parsed.files.length} arquivo(s) serão alterados. Revise o Diff.` 
+            }]);
+          } else {
+            setAiMessages(prev => [...prev, { 
+              role: 'assistant', 
+              content: 'Não foi possível gerar alterações estruturadas. Tente novamente.' 
+            }]);
+          }
+        } catch (parseErr) {
+          setAiMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: data.response 
+          }]);
+        }
+      } else {
+        setAiError(data.error || 'Erro ao contactar AI Engine');
+      }
+    } catch (err) {
+      setAiError('Erro ao gerar alterações');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyChanges = async () => {
+    if (!modificationPlan || !selectedRepo) return;
+    
+    const githubToken = localStorage.getItem('github_token');
+    if (!githubToken) return;
+
+    setApplyingChanges(true);
+
+    try {
+      const files = modificationPlan.files;
+      
+      for (const file of files) {
+        if (file.action === 'create') {
+          const response = await fetch(
+            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Authorization': `token ${githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                message: modificationPlan.summary || 'Create file',
+                content: btoa(unescape(encodeURIComponent(file.newContent || ''))),
+                branch: selectedRepo.default_branch,
+              }),
+            }
+          );
+          
+          if (!response.ok) {
+            const errData = await response.json();
+            showToast(`Erro ao criar ${file.path}: ${errData.message}`, 'error');
+          }
+        } else if (file.action === 'modify') {
+          const getResponse = await fetch(
+            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}?ref=${selectedRepo.default_branch}`,
+            {
+              headers: {
+                'Authorization': `token ${githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+              },
+            }
+          );
+          
+          if (!getResponse.ok) {
+            showToast(`Erro ao obter ${file.path}`, 'error');
+            continue;
+          }
+          
+          const fileData = await getResponse.json();
+          const currentContent = atob(fileData.content.replace(/\n/g, ''));
+          
+          if (file.originalContent && currentContent !== file.originalContent) {
+            showToast(`Conflito: ${file.path} foi alterado no GitHub`, 'error');
+            continue;
+          }
+          
+          const updateResponse = await fetch(
+            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Authorization': `token ${githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                message: modificationPlan.summary || 'Update file',
+                content: btoa(unescape(encodeURIComponent(file.newContent || ''))),
+                sha: fileData.sha,
+                branch: selectedRepo.default_branch,
+              }),
+            }
+          );
+          
+          if (!updateResponse.ok) {
+            const errData = await updateResponse.json();
+            showToast(`Erro ao atualizar ${file.path}: ${errData.message}`, 'error');
+          }
+        } else if (file.action === 'delete') {
+          const getResponse = await fetch(
+            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}?ref=${selectedRepo.default_branch}`,
+            {
+              headers: {
+                'Authorization': `token ${githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+              },
+            }
+          );
+          
+          if (getResponse.ok) {
+            const fileData = await getResponse.json();
+            
+            const deleteResponse = await fetch(
+              `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}`,
+              {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `token ${githubToken}`,
+                  'Accept': 'application/vnd.github.v3+json',
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  message: modificationPlan.summary || 'Delete file',
+                  sha: fileData.sha,
+                  branch: selectedRepo.default_branch,
+                }),
+              }
+            );
+            
+            if (!deleteResponse.ok) {
+              const errData = await deleteResponse.json();
+              showToast(`Erro ao excluir ${file.path}: ${errData.message}`, 'error');
+            }
+          }
+        }
+      }
+      
+      showToast('Alterações aplicadas com sucesso!', 'success');
+      setShowDiff(false);
+      setModificationPlan(null);
+      
+      if (showFiles) {
+        await loadFileTree();
+      }
+    } catch (err) {
+      showToast('Erro ao aplicar alterações', 'error');
+    } finally {
+      setApplyingChanges(false);
+    }
+  };
+
+  const renderDiff = () => {
+    if (!modificationPlan || !showDiff) return null;
+
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        background: 'rgba(0,0,0,0.9)',
+        zIndex: 2000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '10px',
+      }}>
+        <div style={{
+          background: '#131320',
+          border: '1px solid #8b5cf6',
+          borderRadius: '12px',
+          width: '100%',
+          maxWidth: '600px',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+        }}>
+          <div style={{
+            padding: '15px',
+            borderBottom: '1px solid #2a2a3e',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}>
+            <h3 style={{ color: 'white', fontSize: '16px', margin: 0 }}>
+              Diff - {modificationPlan.summary || 'Alterações'}
+            </h3>
+            <button
+              onClick={() => {
+                setShowDiff(false);
+                setModificationPlan(null);
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                fontSize: '20px',
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+            {modificationPlan.files.map((file: any, index: number) => (
+              <div key={index} style={{
+                background: '#1a1a2e',
+                border: '1px solid #2a2a3e',
+                borderRadius: '8px',
+                padding: '12px',
+                marginBottom: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                  <span style={{
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    marginRight: '8px',
+                    background: file.action === 'create' ? '#10b981' : file.action === 'delete' ? '#ef4444' : '#8b5cf6',
+                    color: 'white',
+                  }}>
+                    {file.action === 'create' ? 'NOVO' : file.action === 'delete' ? 'EXCLUIR' : 'MODIFICAR'}
+                  </span>
+                  <span style={{ color: '#9ca3af', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {file.path}
+                  </span>
+                </div>
+
+                {file.action === 'delete' && (
+                  <p style={{ color: '#ef4444', fontSize: '13px', margin: '10px 0' }}>
+                    ⚠️ Esta alteração irá excluir este arquivo permanentemente!
+                  </p>
+                )}
+
+                {file.action !== 'delete' && (
+                  <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
+                    {file.originalContent && file.originalContent !== file.newContent && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <p style={{ color: '#ef4444', margin: '0 0 5px' }}>--- Antes:</p>
+                        <pre style={{
+                          background: '#0a0a0f',
+                          padding: '8px',
+                          borderRadius: '4px',
+                          color: '#ef4444',
+                          margin: 0,
+                          maxHeight: '150px',
+                          overflowY: 'auto',
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-all',
+                        }}>
+                          {file.originalContent?.substring(0, 500)}
+                          {(file.originalContent?.length || 0) > 500 ? '...' : ''}
+                        </pre>
+                      </div>
+                    )}
+                    <div>
+                      <p style={{ color: '#10b981', margin: '0 0 5px' }}>+++ Depois:</p>
+                      <pre style={{
+                        background: '#0a0a0f',
+                        padding: '8px',
+                        borderRadius: '4px',
+                        color: '#10b981',
+                        margin: 0,
+                        maxHeight: '150px',
+                        overflowY: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-all',
+                      }}>
+                        {file.newContent?.substring(0, 500)}
+                        {(file.newContent?.length || 0) > 500 ? '...' : ''}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div style={{
+            padding: '15px',
+            borderTop: '1px solid #2a2a3e',
+            display: 'flex',
+            gap: '10px',
+          }}>
+            <button
+              onClick={() => {
+                setShowDiff(false);
+                setModificationPlan(null);
+              }}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#1a1a2e',
+                border: '1px solid #2a2a3e',
+                borderRadius: '8px',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              CANCELAR
+            </button>
+            <button
+              onClick={applyChanges}
+              disabled={applyingChanges}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: applyingChanges ? '#4b5563' : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: applyingChanges ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: 'bold',
+              }}
+            >
+              {applyingChanges ? 'APLICANDO...' : 'APLICAR ALTERAÇÕES'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -626,6 +1036,8 @@ export const Dashboard: React.FC = () => {
                 setSelectedRepo(null);
                 setShowFiles(false);
                 setAiOpen(false);
+                setModificationPlan(null);
+                setShowDiff(false);
               }}
               style={{
                 padding: '8px 16px',
@@ -664,7 +1076,6 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {/* AI Assistant Chat */}
           {aiOpen && (
             <div style={{
               background: '#131320',
@@ -687,7 +1098,7 @@ export const Dashboard: React.FC = () => {
               </div>
 
               <div style={{ 
-                maxHeight: '400px', 
+                maxHeight: '300px', 
                 overflowY: 'auto', 
                 marginBottom: '15px',
               }}>
@@ -740,7 +1151,7 @@ export const Dashboard: React.FC = () => {
                 )}
               </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 <input
                   type="text"
                   value={aiPrompt}
@@ -767,9 +1178,9 @@ export const Dashboard: React.FC = () => {
                   onClick={sendAIMessage}
                   disabled={aiLoading || !aiPrompt.trim()}
                   style={{
-                    padding: '12px 20px',
-                    background: aiLoading || !aiPrompt.trim() ? '#4b5563' : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-                    border: 'none',
+                    padding: '12px 15px',
+                    background: aiLoading || !aiPrompt.trim() ? '#4b5563' : '#1a1a2e',
+                    border: '1px solid #2a2a3e',
                     borderRadius: '8px',
                     color: 'white',
                     cursor: aiLoading || !aiPrompt.trim() ? 'not-allowed' : 'pointer',
@@ -781,6 +1192,24 @@ export const Dashboard: React.FC = () => {
                   <Send size={16} />
                 </button>
               </div>
+
+              <button
+                onClick={generateModification}
+                disabled={aiLoading || !aiPrompt.trim()}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: aiLoading || !aiPrompt.trim() ? '#4b5563' : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  cursor: aiLoading || !aiPrompt.trim() ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {aiLoading ? 'GERANDO...' : 'GERAR ALTERAÇÕES'}
+              </button>
 
               {aiError && (
                 <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '10px' }}>
@@ -822,7 +1251,7 @@ export const Dashboard: React.FC = () => {
                 <h3 style={{ color: 'white', fontSize: '16px', marginBottom: '15px' }}>
                   Arquivos ({fileTree.length})
                 </h3>
-                <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                   {fileTree.slice(0, 100).map((file: any) => (
                     <button
                       key={file.path}
@@ -953,7 +1382,6 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Editor de Arquivos */}
       {editingFile && (
         <FileEditor
           filePath={editingFile.path}
@@ -966,7 +1394,8 @@ export const Dashboard: React.FC = () => {
         />
       )}
 
-      {/* Toast */}
+      {renderDiff()}
+
       {toast && (
         <div style={{
           position: 'fixed',
