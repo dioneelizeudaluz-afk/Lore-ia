@@ -23,66 +23,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let systemPrompt = '';
 
     if (mode === 'modify') {
-      systemPrompt = `Você é o LORE IA, um programador expert que cria código completo e funcional.
-O usuário NÃO sabe programar. Ele fala em linguagem simples.
-Responda APENAS com JSON válido.
-FORMATO: {"summary":"breve","files":[{"path":"src/arquivo.tsx","action":"create","originalContent":"","newContent":"CÓDIGO COMPLETO"}]}
-CONTEXTO: ${JSON.stringify(context).substring(0, 1500)}`;
+      systemPrompt = 'Você é um programador. Crie código para: ' + prompt + '\n\nResponda APENAS com JSON: {"summary":"breve","files":[{"path":"src/arquivo.tsx","action":"create","originalContent":"","newContent":"código"}]}\n\nCONTEXTO: ' + JSON.stringify(context).substring(0, 1500);
     } else {
-      systemPrompt = `Você é o LORE IA, um assistente. Responda em português simples.
-CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
+      systemPrompt = 'Responda em português: ' + prompt + '\n\nCONTEXTO: ' + JSON.stringify(context).substring(0, 1000);
     }
 
-    const fullPrompt = systemPrompt + '\n\nPEDIDO:\n' + prompt;
+    // Tenta até 5 vezes
+    for (let i = 0; i < 5; i++) {
+      try {
+        const response = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + apiKey,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: systemPrompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 8000,
+              },
+            }),
+          }
+        );
 
-    let lastError = '';
-    
-    // Tenta até 3 vezes com espera
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + apiKey,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: fullPrompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 8000,
-            },
-          }),
+        if (response.ok) {
+          const data = await response.json();
+          const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (aiResponse && aiResponse.trim().length > 0) {
+            return res.status(200).json({ response: aiResponse });
+          }
         }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        if (aiResponse && aiResponse.trim().length > 0) {
-          return res.status(200).json({ response: aiResponse });
-        }
+      } catch (err) {
+        // Tenta de novo
       }
 
-      const errorData = await response.json();
-      lastError = errorData.error?.message || 'Erro';
-      
-      // Se for limite de requisições, aguarda
-      if (lastError.includes('Quota exceeded') || lastError.includes('retry in')) {
-        const retryMatch = lastError.match(/retry in ([\d.]+)s/);
-        const waitTime = retryMatch ? parseFloat(retryMatch[1]) * 1000 : 20000;
-        await new Promise(resolve => setTimeout(resolve, Math.min(waitTime, 30000)));
-        continue;
-      }
-      
-      break;
+      // Espera entre tentativas
+      await new Promise(resolve => setTimeout(resolve, 5000 * (i + 1)));
     }
 
     return res.status(500).json({ 
-      error: 'Gemini está limitando requisições. Aguarde 30 segundos e tente novamente.' 
+      error: 'Gemini indisponível no momento. Tente novamente em 1 minuto.' 
     });
 
   } catch (error) {
     return res.status(500).json({ 
-      error: 'Erro de conexão. Tente novamente.' 
+      error: 'Erro no servidor. Tente novamente.' 
     });
   }
-  }
+          }
