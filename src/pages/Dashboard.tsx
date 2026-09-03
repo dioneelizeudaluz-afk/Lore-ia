@@ -1,5 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Github, FolderOpen, GitCommit, Zap, ArrowRight, FileCode, Save, X, Check } from 'lucide-react';
+import { 
+  Github, 
+  FolderOpen, 
+  GitCommit, 
+  Zap, 
+  ArrowRight, 
+  FileCode, 
+  Save, 
+  X, 
+  Check,
+  Sparkles,
+  Send,
+  Bot,
+  Loader2
+} from 'lucide-react';
 
 // Componente do Editor de Arquivos
 const FileEditor: React.FC<{
@@ -15,38 +29,6 @@ const FileEditor: React.FC<{
   const [commitMessage, setCommitMessage] = useState(`update: ${fileName}`);
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const getLanguage = (filename: string): string => {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    const langMap: Record<string, string> = {
-      'js': 'javascript',
-      'jsx': 'javascript',
-      'ts': 'typescript',
-      'tsx': 'typescript',
-      'html': 'html',
-      'css': 'css',
-      'json': 'json',
-      'md': 'markdown',
-      'py': 'python',
-      'java': 'java',
-      'c': 'c',
-      'cpp': 'cpp',
-      'cs': 'csharp',
-      'go': 'go',
-      'rs': 'rust',
-      'php': 'php',
-      'rb': 'ruby',
-      'swift': 'swift',
-      'kt': 'kotlin',
-      'sql': 'sql',
-      'sh': 'shell',
-      'yml': 'yaml',
-      'yaml': 'yaml',
-      'xml': 'xml',
-      'svg': 'xml',
-    };
-    return langMap[ext || ''] || 'plaintext';
-  };
 
   const handleSave = () => {
     setShowConfirm(true);
@@ -74,7 +56,6 @@ const FileEditor: React.FC<{
       display: 'flex',
       flexDirection: 'column',
     }}>
-      {/* Header */}
       <div style={{
         background: '#131320',
         borderBottom: '1px solid #2a2a3e',
@@ -131,7 +112,6 @@ const FileEditor: React.FC<{
         </div>
       </div>
 
-      {/* Editor */}
       <div style={{ flex: 1, overflow: 'auto', padding: '15px' }}>
         <textarea
           value={editedContent}
@@ -157,7 +137,6 @@ const FileEditor: React.FC<{
         />
       </div>
 
-      {/* Modal de Confirmação */}
       {showConfirm && (
         <div style={{
           position: 'fixed',
@@ -264,6 +243,18 @@ export const Dashboard: React.FC = () => {
   } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // AI Assistant states
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiMessages, setAiMessages] = useState<any[]>([
+    {
+      role: 'assistant',
+      content: 'Olá! Sou o LORE IA. Posso analisar seu projeto e criar planos de alteração. O que deseja fazer?',
+    },
+  ]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+
   useEffect(() => {
     const savedToken = localStorage.getItem('github_token');
     const savedUser = localStorage.getItem('github_user');
@@ -344,12 +335,20 @@ export const Dashboard: React.FC = () => {
     setFileTree([]);
     setShowFiles(false);
     setEditingFile(null);
+    setAiMessages([
+      {
+        role: 'assistant',
+        content: 'Olá! Sou o LORE IA. Posso analisar seu projeto e criar planos de alteração. O que deseja fazer?',
+      },
+    ]);
+    setAiOpen(false);
   };
 
   const openRepository = (repo: any) => {
     setSelectedRepo(repo);
     setShowFiles(false);
     setFileTree([]);
+    setAiOpen(false);
   };
 
   const loadFileTree = async () => {
@@ -428,7 +427,6 @@ export const Dashboard: React.FC = () => {
     if (!githubToken) return;
 
     try {
-      // Get current file SHA
       const getResponse = await fetch(
         `https://api.github.com/repos/${selectedRepo.full_name}/contents/${filePath}?ref=${selectedRepo.default_branch}`,
         {
@@ -447,7 +445,6 @@ export const Dashboard: React.FC = () => {
       const fileData = await getResponse.json();
       const sha = fileData.sha;
 
-      // Update file
       const updateResponse = await fetch(
         `https://api.github.com/repos/${selectedRepo.full_name}/contents/${filePath}`,
         {
@@ -474,6 +471,82 @@ export const Dashboard: React.FC = () => {
       }
     } catch (err) {
       showToast('Erro ao salvar arquivo', 'error');
+    }
+  };
+
+  // AI Functions
+  const analyzeProject = async () => {
+    if (!selectedRepo) return null;
+    
+    const githubToken = localStorage.getItem('github_token');
+    if (!githubToken) return null;
+
+    try {
+      const response = await fetch('/api/ai/analyze-project', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repoFullName: selectedRepo.full_name,
+          branch: selectedRepo.default_branch,
+          githubToken: githubToken,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.context;
+      }
+    } catch (err) {
+      console.error('Erro ao analisar projeto:', err);
+    }
+    return null;
+  };
+
+  const sendAIMessage = async () => {
+    if (!aiPrompt.trim() || aiLoading) return;
+    
+    const userMessage = aiPrompt.trim();
+    setAiPrompt('');
+    setAiMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setAiLoading(true);
+    setAiError('');
+
+    try {
+      const context = await analyzeProject();
+      
+      const response = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: userMessage,
+          context: context || { framework: 'unknown', structure: [] },
+          conversation: aiMessages,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.response) {
+        setAiMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+      } else {
+        setAiError(data.error || 'Erro ao contactar AI Engine');
+        setAiMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: data.error || 'Não foi possível contactar o AI Engine. Verifique a configuração da API.' 
+        }]);
+      }
+    } catch (err) {
+      setAiError('Erro ao contactar AI Engine');
+      setAiMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Não foi possível contactar o AI Engine. Verifique a configuração da API.' 
+      }]);
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -547,28 +620,175 @@ export const Dashboard: React.FC = () => {
         </div>
       ) : selectedRepo ? (
         <div>
-          <button
-            onClick={() => {
-              setSelectedRepo(null);
-              setShowFiles(false);
-            }}
-            style={{
-              padding: '8px 16px',
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
+            <button
+              onClick={() => {
+                setSelectedRepo(null);
+                setShowFiles(false);
+                setAiOpen(false);
+              }}
+              style={{
+                padding: '8px 16px',
+                background: '#131320',
+                border: '1px solid #2a2a3e',
+                borderRadius: '6px',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+              }}
+            >
+              <ArrowRight size={16} style={{ transform: 'rotate(180deg)' }} />
+              Voltar
+            </button>
+
+            <button
+              onClick={() => setAiOpen(!aiOpen)}
+              style={{
+                padding: '8px 16px',
+                background: aiOpen ? '#8b5cf6' : '#131320',
+                border: '1px solid #8b5cf6',
+                borderRadius: '6px',
+                color: aiOpen ? 'white' : '#8b5cf6',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+              }}
+            >
+              <Sparkles size={16} />
+              AI Assistant
+            </button>
+          </div>
+
+          {/* AI Assistant Chat */}
+          {aiOpen && (
+            <div style={{
               background: '#131320',
-              border: '1px solid #2a2a3e',
-              borderRadius: '6px',
-              color: '#9ca3af',
-              cursor: 'pointer',
+              border: '1px solid #8b5cf6',
+              borderRadius: '10px',
+              padding: '15px',
               marginBottom: '15px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '14px',
-            }}
-          >
-            <ArrowRight size={16} style={{ transform: 'rotate(180deg)' }} />
-            Voltar
-          </button>
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                marginBottom: '15px',
+                borderBottom: '1px solid #2a2a3e',
+                paddingBottom: '10px',
+              }}>
+                <Bot size={20} color="#8b5cf6" style={{ marginRight: '10px' }} />
+                <h3 style={{ color: '#8b5cf6', fontSize: '16px', margin: 0 }}>
+                  LORE IA Assistant
+                </h3>
+              </div>
+
+              <div style={{ 
+                maxHeight: '400px', 
+                overflowY: 'auto', 
+                marginBottom: '15px',
+              }}>
+                {aiMessages.map((msg, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    <div style={{
+                      maxWidth: '85%',
+                      background: msg.role === 'user' ? '#8b5cf6' : '#1a1a2e',
+                      border: '1px solid ' + (msg.role === 'user' ? '#8b5cf6' : '#2a2a3e'),
+                      borderRadius: '10px',
+                      padding: '12px',
+                    }}>
+                      <p style={{
+                        color: 'white',
+                        fontSize: '13px',
+                        margin: 0,
+                        whiteSpace: 'pre-wrap',
+                        lineHeight: '1.5',
+                      }}>
+                        {msg.content}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                
+                {aiLoading && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '10px' }}>
+                    <div style={{
+                      background: '#1a1a2e',
+                      border: '1px solid #2a2a3e',
+                      borderRadius: '10px',
+                      padding: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}>
+                      <Loader2 size={16} color="#8b5cf6" style={{ animation: 'spin 1s linear infinite' }} />
+                      <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>
+                        LORE IA está analisando o projeto...
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input
+                  type="text"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendAIMessage();
+                    }
+                  }}
+                  placeholder="Descreva o que você quer analisar ou alterar..."
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: '#1a1a2e',
+                    border: '1px solid #2a2a3e',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <button
+                  onClick={sendAIMessage}
+                  disabled={aiLoading || !aiPrompt.trim()}
+                  style={{
+                    padding: '12px 20px',
+                    background: aiLoading || !aiPrompt.trim() ? '#4b5563' : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'white',
+                    cursor: aiLoading || !aiPrompt.trim() ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Send size={16} />
+                </button>
+              </div>
+
+              {aiError && (
+                <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '10px' }}>
+                  {aiError}
+                </p>
+              )}
+            </div>
+          )}
 
           <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
