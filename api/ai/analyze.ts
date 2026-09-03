@@ -31,28 +31,26 @@ ${JSON.stringify(context, null, 2)}
 CONTEÚDO DOS ARQUIVOS RELEVANTES:
 ${JSON.stringify(context.fileContents || {}, null, 2)}
 
-REGRAS PARA MODIFICAÇÃO:
-1. Responda APENAS com JSON válido no seguinte formato:
-{
-  "summary": "Descrição curta da alteração",
-  "files": [
-    {
-      "path": "caminho/completo/do/arquivo",
-      "action": "modify" | "create" | "delete",
-      "originalContent": "conteúdo original completo",
-      "newContent": "novo conteúdo completo"
-    }
-  ]
-}
+IMPORTANTE - FORMATO DA RESPOSTA:
+Você DEVE responder APENAS com JSON puro, sem markdown, sem código, sem explicações.
 
-2. NÃO use markdown, NÃO use comentários, APENAS JSON.
-3. Preserve imports, funções e lógica existente.
-4. Altere SOMENTE o necessário.
-5. NÃO reescreva arquivos inteiros se uma mudança parcial bastar.
-6. NÃO crie comandos, scripts ou código malicioso.
+O JSON DEVE ter EXATAMENTE este formato:
+{"summary":"descrição curta","files":[{"path":"caminho/do/arquivo","action":"modify","originalContent":"conteúdo original","newContent":"conteúdo novo"}]}
+
+EXEMPLO DE RESPOSTA CORRETA:
+{"summary":"Mudar fundo para preto","files":[{"path":"src/index.css","action":"modify","originalContent":"body { background: white; }","newContent":"body { background: #000000; }"}]}
+
+REGRAS:
+1. Responda APENAS JSON.
+2. NÃO use crases.
+3. NÃO use markdown.
+4. NÃO escreva "Aqui está o JSON".
+5. NÃO adicione texto antes ou depois do JSON.
+6. O JSON deve começar com { e terminar com }.
 7. Para criar arquivo, use action: "create" e originalContent: "".
 8. Para excluir, use action: "delete" e newContent: "".
-9. Verifique se o JSON está completo e válido.
+9. Preserve imports e lógica existente.
+10. Altere SOMENTE o necessário.
 
 CONVERSA ANTERIOR:
 ${JSON.stringify(conversation || [], null, 2)}`;
@@ -74,7 +72,7 @@ CONVERSA ANTERIOR:
 ${JSON.stringify(conversation || [], null, 2)}`;
     }
 
-    const fullPrompt = systemPrompt + '\n\nPEDIDO DO USUÁRIO:\n' + prompt;
+    const fullPrompt = systemPrompt + '\n\nPEDIDO DO USUÁRIO:\n' + prompt + '\n\nLEMBRE-SE: Responda APENAS com JSON válido.';
 
     const response = await fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + apiKey,
@@ -92,7 +90,7 @@ ${JSON.stringify(conversation || [], null, 2)}`;
             }
           ],
           generationConfig: {
-            temperature: 0.3,
+            temperature: 0.1,
             maxOutputTokens: 8000,
           },
         }),
