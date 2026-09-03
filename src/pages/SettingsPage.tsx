@@ -1,34 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { Key, Sparkles, Save, Check } from 'lucide-react';
+import { Key, Sparkles, Save, Check, Cpu, GitBranch } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
   const [geminiKey, setGeminiKey] = useState('');
-  const [claudeKey, setClaudeKey] = useState('');
-  const [deepseekKey, setDeepseekKey] = useState('');
+  const [hy3Key, setHy3Key] = useState('');
   const [aiProvider, setAiProvider] = useState('gemini');
-  const [aiModel, setAiModel] = useState('gemini-pro');
+  const [aiModel, setAiModel] = useState('gemini-3.6-flash');
+  const [autoRouting, setAutoRouting] = useState(true);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     const savedGemini = localStorage.getItem('gemini_api_key');
-    const savedClaude = localStorage.getItem('claude_api_key');
-    const savedDeepseek = localStorage.getItem('deepseek_api_key');
+    const savedHy3 = localStorage.getItem('hy3_api_key');
     const savedProvider = localStorage.getItem('ai_provider');
     const savedModel = localStorage.getItem('ai_model');
+    const savedRouting = localStorage.getItem('auto_routing');
 
     if (savedGemini) setGeminiKey(savedGemini);
-    if (savedClaude) setClaudeKey(savedClaude);
-    if (savedDeepseek) setDeepseekKey(savedDeepseek);
+    if (savedHy3) setHy3Key(savedHy3);
     if (savedProvider) setAiProvider(savedProvider);
     if (savedModel) setAiModel(savedModel);
+    if (savedRouting) setAutoRouting(savedRouting === 'true');
   }, []);
 
   const handleSave = () => {
     localStorage.setItem('gemini_api_key', geminiKey);
-    localStorage.setItem('claude_api_key', claudeKey);
-    localStorage.setItem('deepseek_api_key', deepseekKey);
+    localStorage.setItem('hy3_api_key', hy3Key);
     localStorage.setItem('ai_provider', aiProvider);
     localStorage.setItem('ai_model', aiModel);
+    localStorage.setItem('auto_routing', String(autoRouting));
     
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -39,6 +39,131 @@ export const SettingsPage: React.FC = () => {
       <h1 style={{ color: 'white', fontSize: '26px', marginBottom: '20px' }}>
         Configurações
       </h1>
+
+      {/* Modelos de IA */}
+      <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
+        <h2 style={{ color: '#8b5cf6', fontSize: '18px', marginBottom: '20px', display: 'flex', alignItems: 'center' }}>
+          <Cpu size={20} style={{ marginRight: '10px' }} />
+          Modelos de IA
+        </h2>
+
+        {/* Gemini Status */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px',
+          background: '#1a1a2e',
+          borderRadius: '8px',
+          marginBottom: '10px',
+        }}>
+          <div>
+            <p style={{ color: 'white', fontSize: '14px', fontWeight: 'bold', margin: 0 }}>Gemini</p>
+            <p style={{ color: '#9ca3af', fontSize: '12px', margin: '5px 0 0' }}>Cérebro principal</p>
+          </div>
+          <span style={{
+            padding: '4px 10px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            background: '#10b98120',
+            color: '#10b981',
+          }}>
+            ✓ Conectado
+          </span>
+        </div>
+
+        {/* Hy3 Status */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px',
+          background: '#1a1a2e',
+          borderRadius: '8px',
+          marginBottom: '15px',
+        }}>
+          <div>
+            <p style={{ color: 'white', fontSize: '14px', fontWeight: 'bold', margin: 0 }}>Hy3</p>
+            <p style={{ color: '#9ca3af', fontSize: '12px', margin: '5px 0 0' }}>Especialista em programação</p>
+          </div>
+          <span style={{
+            padding: '4px 10px',
+            borderRadius: '20px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            background: hy3Key ? '#10b98120' : '#6b728020',
+            color: hy3Key ? '#10b981' : '#6b7280',
+          }}>
+            {hy3Key ? '✓ Conectado' : 'Não configurado'}
+          </span>
+        </div>
+
+        {/* Modelo principal */}
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ color: '#9ca3af', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+            Modelo principal
+          </label>
+          <select
+            value={aiProvider}
+            onChange={(e) => setAiProvider(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#1a1a2e',
+              border: '1px solid #2a2a3e',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '14px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <option value="gemini">Gemini</option>
+            <option value="hy3">Hy3</option>
+          </select>
+        </div>
+
+        {/* Roteamento automático */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px',
+          background: '#1a1a2e',
+          borderRadius: '8px',
+        }}>
+          <div>
+            <p style={{ color: 'white', fontSize: '14px', fontWeight: 'bold', margin: 0 }}>Roteamento automático</p>
+            <p style={{ color: '#9ca3af', fontSize: '12px', margin: '5px 0 0' }}>
+              Escolhe automaticamente o melhor modelo
+            </p>
+          </div>
+          <button
+            onClick={() => setAutoRouting(!autoRouting)}
+            style={{
+              width: '50px',
+              height: '28px',
+              borderRadius: '14px',
+              background: autoRouting ? '#8b5cf6' : '#2a2a3e',
+              border: 'none',
+              cursor: 'pointer',
+              position: 'relative',
+              transition: 'all 0.3s',
+            }}
+          >
+            <span style={{
+              position: 'absolute',
+              top: '3px',
+              left: autoRouting ? '25px' : '3px',
+              width: '22px',
+              height: '22px',
+              borderRadius: '50%',
+              background: 'white',
+              transition: 'all 0.3s',
+            }} />
+          </button>
+        </div>
+      </div>
 
       {/* API Keys */}
       <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
@@ -71,13 +196,13 @@ export const SettingsPage: React.FC = () => {
 
         <div style={{ marginBottom: '15px' }}>
           <label style={{ color: '#9ca3af', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
-            Anthropic Claude API Key
+            Hy3 API Key
           </label>
           <input
             type="password"
-            placeholder="sk-ant-..."
-            value={claudeKey}
-            onChange={(e) => setClaudeKey(e.target.value)}
+            placeholder="hy3-..."
+            value={hy3Key}
+            onChange={(e) => setHy3Key(e.target.value)}
             style={{
               width: '100%',
               padding: '12px',
@@ -89,100 +214,6 @@ export const SettingsPage: React.FC = () => {
               boxSizing: 'border-box',
             }}
           />
-        </div>
-
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ color: '#9ca3af', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
-            DeepSeek API Key
-          </label>
-          <input
-            type="password"
-            placeholder="sk-..."
-            value={deepseekKey}
-            onChange={(e) => setDeepseekKey(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: '#1a1a2e',
-              border: '1px solid #2a2a3e',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '14px',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
-      </div>
-
-      {/* AI Engine */}
-      <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
-        <h2 style={{ color: '#8b5cf6', fontSize: '18px', marginBottom: '20px', display: 'flex', alignItems: 'center' }}>
-          <Sparkles size={20} style={{ marginRight: '10px' }} />
-          IA Engine
-        </h2>
-
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ color: '#9ca3af', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
-            Provider Padrão
-          </label>
-          <select
-            value={aiProvider}
-            onChange={(e) => setAiProvider(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: '#1a1a2e',
-              border: '1px solid #2a2a3e',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '14px',
-              boxSizing: 'border-box',
-            }}
-          >
-            <option value="gemini">Google Gemini</option>
-            <option value="claude">Anthropic Claude</option>
-            <option value="deepseek">DeepSeek</option>
-          </select>
-        </div>
-
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ color: '#9ca3af', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
-            Modelo
-          </label>
-          <select
-            value={aiModel}
-            onChange={(e) => setAiModel(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: '#1a1a2e',
-              border: '1px solid #2a2a3e',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '14px',
-              boxSizing: 'border-box',
-            }}
-          >
-            {aiProvider === 'gemini' && (
-              <>
-                <option value="gemini-pro">Gemini Pro</option>
-                <option value="gemini-ultra">Gemini Ultra</option>
-              </>
-            )}
-            {aiProvider === 'claude' && (
-              <>
-                <option value="claude-3-opus">Claude 3 Opus</option>
-                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-                <option value="claude-2">Claude 2</option>
-              </>
-            )}
-            {aiProvider === 'deepseek' && (
-              <>
-                <option value="deepseek-chat">DeepSeek Chat</option>
-                <option value="deepseek-coder">DeepSeek Coder</option>
-              </>
-            )}
-          </select>
         </div>
       </div>
 
