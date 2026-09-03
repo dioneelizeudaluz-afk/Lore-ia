@@ -43,7 +43,7 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'llama-3.1-8b-instant',
         messages: [
           { role: 'user', content: fullPrompt }
         ],
@@ -75,4 +75,4 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
       error: 'Erro de conexão com Groq. Tente novamente.' 
     });
   }
-        }
+      }
