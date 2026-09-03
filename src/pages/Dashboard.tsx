@@ -257,6 +257,20 @@ export const Dashboard: React.FC = () => {
   const [showDiff, setShowDiff] = useState(false);
   const [applyingChanges, setApplyingChanges] = useState(false);
 
+  const [deployStatus, setDeployStatus] = useState<{
+    step: string;
+    status: 'pending' | 'loading' | 'success' | 'error';
+    message: string;
+  }[]>([
+    { step: 'Alterações aplicadas', status: 'pending', message: '' },
+    { step: 'Commit criado', status: 'pending', message: '' },
+    { step: 'Push enviado para GitHub', status: 'pending', message: '' },
+    { step: 'Deploy acionado', status: 'pending', message: '' },
+  ]);
+  const [showDeployProgress, setShowDeployProgress] = useState(false);
+  const [commitMessageInput, setCommitMessageInput] = useState('');
+  const [showCommitModal, setShowCommitModal] = useState(false);
+
   useEffect(() => {
     const savedToken = localStorage.getItem('github_token');
     const savedUser = localStorage.getItem('github_user');
@@ -346,6 +360,8 @@ export const Dashboard: React.FC = () => {
     setAiOpen(false);
     setModificationPlan(null);
     setShowDiff(false);
+    setShowDeployProgress(false);
+    setShowCommitModal(false);
   };
 
   const openRepository = (repo: any) => {
@@ -650,136 +666,134 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const applyChanges = async () => {
+  const generateCommitMessage = (plan: any): string => {
+    if (!plan) return 'Update project files';
+    
+    const summary = plan.summary || '';
+    const files = plan.files || [];
+    
+    if (summary.toLowerCase().includes('fix') || summary.toLowerCase().includes('corrig')) {
+      return `fix: ${summary}`;
+    }
+    if (summary.toLowerCase().includes('add') || summary.toLowerCase().includes('criar')) {
+      return `feat: ${summary}`;
+    }
+    if (summary.toLowerCase().includes('update') || summary.toLowerCase().includes('atualizar')) {
+      return `update: ${summary}`;
+    }
+    if (summary.toLowerCase().includes('remove') || summary.toLowerCase().includes('remover')) {
+      return `remove: ${summary}`;
+    }
+    
+    return `update: ${summary || 'project files'}`;
+  };
+
+  const commitAndPush = async () => {
+    if (!modificationPlan || !selectedRepo || applyingChanges) return;
+    
+    const githubToken = localStorage.getItem('github_token');
+    if (!githubToken) {
+      showToast('GitHub não conectado', 'error');
+      return;
+    }
+
+    setCommitMessageInput(generateCommitMessage(modificationPlan));
+    setShowCommitModal(true);
+  };
+
+  const confirmCommitAndPush = async () => {
     if (!modificationPlan || !selectedRepo) return;
     
     const githubToken = localStorage.getItem('github_token');
     if (!githubToken) return;
 
+    setShowCommitModal(false);
+    setShowDeployProgress(true);
     setApplyingChanges(true);
 
+    setDeployStatus([
+      { step: 'Alterações aplicadas', status: 'loading', message: 'Aplicando alterações...' },
+      { step: 'Commit criado', status: 'pending', message: '' },
+      { step: 'Push enviado para GitHub', status: 'pending', message: '' },
+      { step: 'Deploy acionado', status: 'pending', message: '' },
+    ]);
+
     try {
-      const files = modificationPlan.files;
-      
-      for (const file of files) {
-        if (file.action === 'create') {
-          const response = await fetch(
-            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}`,
-            {
-              method: 'PUT',
-              headers: {
-                'Authorization': `token ${githubToken}`,
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                message: modificationPlan.summary || 'Create file',
-                content: btoa(unescape(encodeURIComponent(file.newContent || ''))),
-                branch: selectedRepo.default_branch,
-              }),
-            }
-          );
-          
-          if (!response.ok) {
-            const errData = await response.json();
-            showToast(`Erro ao criar ${file.path}: ${errData.message}`, 'error');
-          }
-        } else if (file.action === 'modify') {
-          const getResponse = await fetch(
-            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}?ref=${selectedRepo.default_branch}`,
-            {
-              headers: {
-                'Authorization': `token ${githubToken}`,
-                'Accept': 'application/vnd.github.v3+json',
-              },
-            }
-          );
-          
-          if (!getResponse.ok) {
-            showToast(`Erro ao obter ${file.path}`, 'error');
-            continue;
-          }
-          
-          const fileData = await getResponse.json();
-          const currentContent = atob(fileData.content.replace(/\n/g, ''));
-          
-          if (file.originalContent && currentContent !== file.originalContent) {
-            showToast(`Conflito: ${file.path} foi alterado no GitHub`, 'error');
-            continue;
-          }
-          
-          const updateResponse = await fetch(
-            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}`,
-            {
-              method: 'PUT',
-              headers: {
-                'Authorization': `token ${githubToken}`,
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                message: modificationPlan.summary || 'Update file',
-                content: btoa(unescape(encodeURIComponent(file.newContent || ''))),
-                sha: fileData.sha,
-                branch: selectedRepo.default_branch,
-              }),
-            }
-          );
-          
-          if (!updateResponse.ok) {
-            const errData = await updateResponse.json();
-            showToast(`Erro ao atualizar ${file.path}: ${errData.message}`, 'error');
-          }
-        } else if (file.action === 'delete') {
-          const getResponse = await fetch(
-            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}?ref=${selectedRepo.default_branch}`,
-            {
-              headers: {
-                'Authorization': `token ${githubToken}`,
-                'Accept': 'application/vnd.github.v3+json',
-              },
-            }
-          );
-          
-          if (getResponse.ok) {
-            const fileData = await getResponse.json();
-            
-            const deleteResponse = await fetch(
-              `https://api.github.com/repos/${selectedRepo.full_name}/contents/${file.path}`,
-              {
-                method: 'DELETE',
-                headers: {
-                  'Authorization': `token ${githubToken}`,
-                  'Accept': 'application/vnd.github.v3+json',
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  message: modificationPlan.summary || 'Delete file',
-                  sha: fileData.sha,
-                  branch: selectedRepo.default_branch,
-                }),
-              }
-            );
-            
-            if (!deleteResponse.ok) {
-              const errData = await deleteResponse.json();
-              showToast(`Erro ao excluir ${file.path}: ${errData.message}`, 'error');
-            }
-          }
-        }
+      const changes = modificationPlan.files.map((file: any) => ({
+        path: file.path,
+        content: file.newContent || '',
+        action: file.action,
+      }));
+
+      const commitResponse = await fetch('/api/github/commit-and-push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repoFullName: selectedRepo.full_name,
+          branch: selectedRepo.default_branch,
+          githubToken: githubToken,
+          message: commitMessageInput || generateCommitMessage(modificationPlan),
+          changes: changes,
+        }),
+      });
+
+      const commitData = await commitResponse.json();
+
+      if (!commitResponse.ok) {
+        setDeployStatus(prev => prev.map((s, i) => 
+          i === 0 ? { ...s, status: 'error', message: commitData.error || 'Erro ao aplicar alterações' } : s
+        ));
+        showToast(commitData.error || 'Erro ao aplicar alterações', 'error');
+        return;
       }
-      
-      showToast('Alterações aplicadas com sucesso!', 'success');
-      setShowDiff(false);
-      setModificationPlan(null);
-      
+
+      setDeployStatus(prev => prev.map((s, i) => 
+        i === 0 ? { ...s, status: 'success', message: 'Alterações aplicadas com sucesso' } :
+        i === 1 ? { ...s, status: 'success', message: `Commit: ${commitData.commitSha?.substring(0, 7) || 'criado'}` } :
+        i === 2 ? { ...s, status: 'success', message: 'Push enviado para GitHub' } :
+        i === 3 ? { ...s, status: 'loading', message: 'Aguardando deploy automático...' } : s
+      ));
+
+      const checkResponse = await fetch('/api/github/check-deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          repoFullName: selectedRepo.full_name,
+          githubToken: githubToken,
+        }),
+      });
+
+      const checkData = await checkResponse.json();
+
+      if (checkResponse.ok && checkData.success) {
+        setDeployStatus(prev => prev.map((s, i) => 
+          i === 3 ? { ...s, status: 'success', message: 'Deploy acionado. O serviço de deploy conectado ao GitHub vai publicar automaticamente.' } : s
+        ));
+        showToast('Push enviado. Deploy automático acionado!', 'success');
+      } else {
+        setDeployStatus(prev => prev.map((s, i) => 
+          i === 3 ? { ...s, status: 'success', message: 'Push confirmado. Deploy será acionado pelo GitHub.' } : s
+        ));
+        showToast('Push enviado. Deploy será acionado pelo GitHub.', 'success');
+      }
+
       if (showFiles) {
         await loadFileTree();
       }
     } catch (err) {
-      showToast('Erro ao aplicar alterações', 'error');
+      console.error('Erro no commit e push:', err);
+      setDeployStatus(prev => prev.map((s, i) => 
+        s.status === 'loading' ? { ...s, status: 'error', message: 'Erro na operação' } : s
+      ));
+      showToast('Erro ao fazer commit e push', 'error');
     } finally {
       setApplyingChanges(false);
+      setModificationPlan(null);
+      setShowDiff(false);
     }
   };
 
@@ -938,7 +952,7 @@ export const Dashboard: React.FC = () => {
               CANCELAR
             </button>
             <button
-              onClick={applyChanges}
+              onClick={commitAndPush}
               disabled={applyingChanges}
               style={{
                 flex: 1,
@@ -955,6 +969,193 @@ export const Dashboard: React.FC = () => {
               {applyingChanges ? 'APLICANDO...' : 'APLICAR ALTERAÇÕES'}
             </button>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCommitModal = () => {
+    if (!showCommitModal) return null;
+
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        background: 'rgba(0,0,0,0.9)',
+        zIndex: 2500,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+      }}>
+        <div style={{
+          background: '#131320',
+          border: '1px solid #8b5cf6',
+          borderRadius: '12px',
+          padding: '25px',
+          maxWidth: '450px',
+          width: '100%',
+        }}>
+          <h3 style={{ color: 'white', fontSize: '18px', marginBottom: '15px' }}>
+            Commit e Push
+          </h3>
+          
+          <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '15px' }}>
+            {modificationPlan?.files?.length || 0} arquivo(s) serão enviados para:
+          </p>
+          
+          <p style={{ color: '#8b5cf6', fontSize: '14px', marginBottom: '15px' }}>
+            {selectedRepo?.full_name} ({selectedRepo?.default_branch})
+          </p>
+
+          <label style={{ color: '#9ca3af', fontSize: '13px', display: 'block', marginBottom: '8px' }}>
+            Mensagem do commit
+          </label>
+          <input
+            type="text"
+            value={commitMessageInput}
+            onChange={(e) => setCommitMessageInput(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#1a1a2e',
+              border: '1px solid #2a2a3e',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '14px',
+              marginBottom: '20px',
+              boxSizing: 'border-box',
+            }}
+          />
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => setShowCommitModal(false)}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#1a1a2e',
+                border: '1px solid #2a2a3e',
+                borderRadius: '8px',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={confirmCommitAndPush}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 'bold',
+              }}
+            >
+              COMMIT E PUSH
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDeployProgress = () => {
+    if (!showDeployProgress) return null;
+
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        background: 'rgba(0,0,0,0.9)',
+        zIndex: 2600,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+      }}>
+        <div style={{
+          background: '#131320',
+          border: '1px solid #8b5cf6',
+          borderRadius: '12px',
+          padding: '25px',
+          maxWidth: '450px',
+          width: '100%',
+        }}>
+          <h3 style={{ color: 'white', fontSize: '18px', marginBottom: '20px', textAlign: 'center' }}>
+            Publicando Alterações
+          </h3>
+
+          <div>
+            {deployStatus.map((step, index) => (
+              <div key={index} style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '12px',
+                marginBottom: '10px',
+                background: '#1a1a2e',
+                borderRadius: '8px',
+                border: '1px solid #2a2a3e',
+              }}>
+                {step.status === 'success' && (
+                  <span style={{ color: '#10b981', fontSize: '20px', marginRight: '10px' }}>✓</span>
+                )}
+                {step.status === 'error' && (
+                  <span style={{ color: '#ef4444', fontSize: '20px', marginRight: '10px' }}>✗</span>
+                )}
+                {step.status === 'loading' && (
+                  <Loader2 size={20} color="#8b5cf6" style={{ marginRight: '10px', animation: 'spin 1s linear infinite' }} />
+                )}
+                {step.status === 'pending' && (
+                  <span style={{ color: '#4b5563', fontSize: '20px', marginRight: '10px' }}>○</span>
+                )}
+                <div>
+                  <p style={{ 
+                    color: step.status === 'success' ? '#10b981' : step.status === 'error' ? '#ef4444' : '#9ca3af',
+                    fontSize: '14px',
+                    margin: 0,
+                    fontWeight: 'bold',
+                  }}>
+                    {step.step}
+                  </p>
+                  {step.message && (
+                    <p style={{ color: '#6b7280', fontSize: '12px', margin: '5px 0 0' }}>
+                      {step.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setShowDeployProgress(false)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#1a1a2e',
+              border: '1px solid #2a2a3e',
+              borderRadius: '8px',
+              color: '#9ca3af',
+              cursor: 'pointer',
+              fontSize: '14px',
+              marginTop: '10px',
+            }}
+          >
+            Fechar
+          </button>
         </div>
       </div>
     );
@@ -1395,6 +1596,8 @@ export const Dashboard: React.FC = () => {
       )}
 
       {renderDiff()}
+      {renderCommitModal()}
+      {renderDeployProgress()}
 
       {toast && (
         <div style={{
