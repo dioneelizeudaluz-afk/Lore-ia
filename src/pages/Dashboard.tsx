@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Github, FolderOpen, GitCommit, Zap, Key, Sparkles } from 'lucide-react';
+import { Github, FolderOpen, GitCommit, Zap, ArrowRight } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const [token, setToken] = useState('');
@@ -8,6 +8,7 @@ export const Dashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [connected, setConnected] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [selectedRepo, setSelectedRepo] = useState<any>(null);
 
   const handleConnect = async () => {
     if (!token.trim()) {
@@ -58,6 +59,44 @@ export const Dashboard: React.FC = () => {
     setUser(null);
     setRepos([]);
     setToken('');
+    setSelectedRepo(null);
+  };
+
+  const openRepository = (repo: any) => {
+    setSelectedRepo(repo);
+    localStorage.setItem('selected_repo', JSON.stringify(repo));
+  };
+
+  const loadFileTree = async (repo: any) => {
+    const githubToken = localStorage.getItem('github_token');
+    if (!githubToken) return;
+
+    try {
+      const response = await fetch(`https://api.github.com/repos/${repo.full_name}/git/trees/${repo.default_branch}?recursive=1`, {
+        headers: {
+          'Authorization': `token ${githubToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const files = data.tree.filter((item: any) => item.type === 'blob');
+        
+        let fileList = 'Arquivos do projeto:\n\n';
+        files.slice(0, 20).forEach((file: any) => {
+          fileList += `📄 ${file.path}\n`;
+        });
+        
+        if (files.length > 20) {
+          fileList += `\n... e mais ${files.length - 20} arquivos`;
+        }
+        
+        alert(fileList);
+      }
+    } catch (err) {
+      alert('Erro ao carregar arquivos');
+    }
   };
 
   return (
@@ -128,6 +167,71 @@ export const Dashboard: React.FC = () => {
             Crie seu token em: github.com/settings/tokens
           </p>
         </div>
+      ) : selectedRepo ? (
+        <div>
+          <button
+            onClick={() => setSelectedRepo(null)}
+            style={{
+              padding: '8px 16px',
+              background: '#131320',
+              border: '1px solid #2a2a3e',
+              borderRadius: '6px',
+              color: '#9ca3af',
+              cursor: 'pointer',
+              marginBottom: '20px',
+            }}
+          >
+            ← Voltar
+          </button>
+
+          <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '30px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
+              <Github size={32} color="#8b5cf6" style={{ marginRight: '15px' }} />
+              <div>
+                <h2 style={{ color: 'white', fontSize: '24px' }}>{selectedRepo.name}</h2>
+                <p style={{ color: '#9ca3af', fontSize: '14px' }}>{selectedRepo.full_name}</p>
+              </div>
+            </div>
+
+            <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '20px' }}>
+              {selectedRepo.description || 'Sem descrição'}
+            </p>
+
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', flexWrap: 'wrap' }}>
+              <div style={{ background: '#1a1a2e', borderRadius: '8px', padding: '15px', flex: 1, minWidth: '150px' }}>
+                <p style={{ color: '#6b7280', fontSize: '12px', marginBottom: '5px' }}>Linguagem</p>
+                <p style={{ color: 'white', fontSize: '16px' }}>{selectedRepo.language || 'Unknown'}</p>
+              </div>
+              <div style={{ background: '#1a1a2e', borderRadius: '8px', padding: '15px', flex: 1, minWidth: '150px' }}>
+                <p style={{ color: '#6b7280', fontSize: '12px', marginBottom: '5px' }}>Branch</p>
+                <p style={{ color: 'white', fontSize: '16px' }}>{selectedRepo.default_branch}</p>
+              </div>
+              <div style={{ background: '#1a1a2e', borderRadius: '8px', padding: '15px', flex: 1, minWidth: '150px' }}>
+                <p style={{ color: '#6b7280', fontSize: '12px', marginBottom: '5px' }}>Atualizado</p>
+                <p style={{ color: 'white', fontSize: '16px' }}>
+                  {new Date(selectedRepo.updated_at).toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => loadFileTree(selectedRepo)}
+              style={{
+                width: '100%',
+                padding: '15px',
+                background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+              }}
+            >
+              Ver Arquivos do Projeto
+            </button>
+          </div>
+        </div>
       ) : (
         <div>
           <div style={{ 
@@ -164,7 +268,6 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {/* Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
             <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '20px' }}>
               <FolderOpen size={24} color="#8b5cf6" style={{ marginBottom: '10px' }} />
@@ -183,7 +286,6 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Repositories */}
           <div style={{ display: 'grid', gap: '15px' }}>
             {repos.map((repo) => (
               <div
@@ -196,6 +298,7 @@ export const Dashboard: React.FC = () => {
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                 }}
+                onClick={() => openRepository(repo)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = '#8b5cf6';
                 }}
@@ -203,14 +306,19 @@ export const Dashboard: React.FC = () => {
                   e.currentTarget.style.borderColor = '#2a2a3e';
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
-                  <Github size={18} color="#8b5cf6" style={{ marginRight: '10px' }} />
-                  <h3 style={{ color: 'white', fontSize: '18px' }}>{repo.name}</h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <Github size={18} color="#8b5cf6" style={{ marginRight: '10px' }} />
+                    <div>
+                      <h3 style={{ color: 'white', fontSize: '18px' }}>{repo.name}</h3>
+                      <p style={{ color: '#9ca3af', fontSize: '12px' }}>
+                        {repo.description || 'Sem descrição'}
+                      </p>
+                    </div>
+                  </div>
+                  <ArrowRight size={18} color="#8b5cf6" />
                 </div>
-                <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '10px' }}>
-                  {repo.description || 'Sem descrição'}
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '15px' }}>
                   <span style={{ color: '#6b7280', fontSize: '12px' }}>
                     {repo.language || 'Unknown'}
                   </span>
