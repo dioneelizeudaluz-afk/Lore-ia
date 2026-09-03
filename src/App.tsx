@@ -23,7 +23,6 @@ function App() {
   return (
     <Router>
       <div style={{ background: '#0a0a0f', minHeight: '100vh' }}>
-        {/* Top Bar Mobile */}
         <header style={{
           background: '#131320',
           borderBottom: '1px solid #2a2a3e',
@@ -49,13 +48,12 @@ function App() {
             >
               {menuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <h1 style={{ color: '#8b5cf6', fontSize: '22px', fontWeight: 'bold' }}>
+            <h1 style={{ color: '#8b5cf6', fontSize: '22px', fontWeight: 'bold', margin: 0 }}>
               LORE IA
             </h1>
           </div>
         </header>
 
-        {/* Sidebar Mobile */}
         {menuOpen && (
           <div style={{
             position: 'fixed',
@@ -92,7 +90,6 @@ function App() {
           </div>
         )}
 
-        {/* Overlay */}
         {menuOpen && (
           <div
             onClick={() => setMenuOpen(false)}
@@ -108,7 +105,6 @@ function App() {
           />
         )}
 
-        {/* Main Content */}
         <main style={{ padding: '15px' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
