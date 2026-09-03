@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!apiKey) {
     return res.status(500).json({ 
-      error: 'Groq não configurado. Adicione GROQ_API_KEY na Vercel.' 
+      error: 'Groq não configurado.' 
     });
   }
 
@@ -23,31 +23,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let systemPrompt = '';
 
     if (mode === 'modify') {
-      systemPrompt = `Você é um programador expert. O usuário não sabe programar.
-Crie código completo para o pedido.
-Responda APENAS com JSON:
-{"summary":"breve","files":[{"path":"src/arquivo.tsx","action":"create","originalContent":"","newContent":"CÓDIGO COMPLETO"}]}
-
+      systemPrompt = `Você é um programador. Crie código para o pedido.
+Responda APENAS JSON: {"summary":"breve","files":[{"path":"src/arquivo.tsx","action":"create","originalContent":"","newContent":"código"}]}
 CONTEXTO: ${JSON.stringify(context).substring(0, 1500)}`;
     } else {
-      systemPrompt = `Responda em português de forma simples.
+      systemPrompt = `Responda em português.
 CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
     }
 
     const fullPrompt = systemPrompt + '\n\nPEDIDO:\n' + prompt;
 
-    // Lista de modelos para tentar
+    // Modelos atuais do Groq (2025)
     const models = [
+      'llama-3.3-70b-versatile',
       'llama-3.1-8b-instant',
-      'llama3-8b-8192',
-      'llama3-70b-8192',
+      'llama-3.1-70b-versatile',
       'mixtral-8x7b-32768',
       'gemma2-9b-it',
-      'gemma-7b-it',
-      'llama-3.1-70b-versatile',
-      'llama-3.3-70b-versatile',
-      'llama-3.2-3b-preview',
-      'llama-3.2-11b-vision-preview',
     ];
 
     let aiResponse = '';
@@ -63,9 +55,7 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
           },
           body: JSON.stringify({
             model: model,
-            messages: [
-              { role: 'user', content: fullPrompt }
-            ],
+            messages: [{ role: 'user', content: fullPrompt }],
             max_tokens: 8000,
             temperature: 0.2,
           }),
@@ -74,9 +64,7 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
         if (response.ok) {
           const data = await response.json();
           aiResponse = data.choices?.[0]?.message?.content || '';
-          if (aiResponse && aiResponse.trim().length > 0) {
-            break;
-          }
+          if (aiResponse.trim().length > 0) break;
         } else {
           const errorData = await response.json();
           lastError = errorData.error?.message || 'Erro';
@@ -86,17 +74,15 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
       }
     }
 
-    if (aiResponse && aiResponse.trim().length > 0) {
+    if (aiResponse.trim().length > 0) {
       return res.status(200).json({ response: aiResponse });
     }
 
     return res.status(500).json({ 
-      error: 'Nenhum modelo Groq disponível. Erro: ' + lastError.substring(0, 100)
+      error: 'Groq indisponível: ' + lastError.substring(0, 80)
     });
 
   } catch (error) {
-    return res.status(500).json({ 
-      error: 'Erro de conexão com Groq.' 
-    });
+    return res.status(500).json({ error: 'Erro interno.' });
   }
-  }
+}
