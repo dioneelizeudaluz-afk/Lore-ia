@@ -1,167 +1,228 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Github, FolderOpen, GitCommit, Zap, ArrowRight } from 'lucide-react';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Spinner } from '@/components/ui/Spinner';
-import { useAppStore } from '@/stores/appStore';
-import { githubService } from '@/services/github/githubService';
-import { GithubRepo } from '@/types/github';
-import { formatDate } from '@/lib/utils';
+import React, { useState } from 'react';
+import { Github, FolderOpen, GitCommit, Zap, Key, Sparkles } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
-  const { user, token, setSelectedRepo } = useAppStore();
-  const [repos, setRepos] = useState<GithubRepo[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [token, setToken] = useState('');
+  const [repos, setRepos] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
-  useEffect(() => {
-    if (token) {
-      loadRepositories();
+  const handleConnect = async () => {
+    if (!token.trim()) {
+      setError('Digite um token');
+      return;
     }
-  }, [token]);
 
-  const loadRepositories = async () => {
     setLoading(true);
-    setError(null);
+    setError('');
+
     try {
-      const repositories = await githubService.listRepositories();
-      setRepos(repositories);
+      const response = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `token ${token.trim()}`,
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        setConnected(true);
+        localStorage.setItem('github_token', token.trim());
+        localStorage.setItem('github_user', JSON.stringify(userData));
+        
+        const reposResponse = await fetch('https://api.github.com/user/repos?sort=updated&per_page=50', {
+          headers: {
+            'Authorization': `token ${token.trim()}`,
+            'Accept': 'application/vnd.github.v3+json',
+          },
+        });
+        
+        const reposData = await reposResponse.json();
+        setRepos(reposData);
+      } else {
+        setError('Token inválido');
+      }
     } catch (err) {
-      setError('Erro ao carregar repositórios');
-      console.error(err);
+      setError('Erro ao conectar');
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredRepos = repos.filter(repo =>
-    repo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    repo.fullName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleSelectRepo = (repo: GithubRepo) => {
-    setSelectedRepo(repo);
-    navigate(`/project/${repo.id}`);
+  const handleLogout = () => {
+    localStorage.clear();
+    setConnected(false);
+    setUser(null);
+    setRepos([]);
+    setToken('');
   };
 
-  if (!token) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Card className="p-8 text-center max-w-md" glow>
-          <Github className="w-16 h-16 text-lore-purple mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Conecte seu GitHub</h2>
-          <p className="text-gray-400 mb-6">
-            Conecte sua conta GitHub para começar a desenvolver com IA
-          </p>
-          <Button
-            size="lg"
-            icon={Github}
-            onClick={() => window.location.href = '/auth/github'}
-          >
-            Conectar GitHub
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full overflow-y-auto p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2">
-            Bem-vindo, <span className="text-gradient">{user?.name}</span>
+    <div>
+      <h1 style={{ color: 'white', fontSize: '28px', marginBottom: '20px' }}>
+        Dashboard
+      </h1>
+
+      {!connected ? (
+        <div style={{ 
+          background: '#131320', 
+          border: '1px solid #8b5cf6', 
+          borderRadius: '12px', 
+          padding: '30px', 
+          textAlign: 'center',
+          maxWidth: '400px',
+          margin: '0 auto',
+        }}>
+          <Github size={48} color="#8b5cf6" style={{ marginBottom: '20px' }} />
+          <h2 style={{ color: 'white', marginBottom: '10px', fontSize: '20px' }}>
+            Conectar GitHub
           </h2>
-          <p className="text-gray-400">
-            Selecione um projeto para começar a desenvolver
+          <p style={{ color: '#9ca3af', marginBottom: '20px', fontSize: '14px' }}>
+            Digite seu Personal Access Token
+          </p>
+          
+          <input
+            type="password"
+            placeholder="ghp_xxxxxxxxxxxxxxxx"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#1a1a2e',
+              border: '1px solid #8b5cf6',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '16px',
+              marginBottom: '15px',
+              boxSizing: 'border-box',
+            }}
+          />
+          
+          <button
+            onClick={handleConnect}
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+              border: 'none',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            {loading ? 'Conectando...' : 'Conectar'}
+          </button>
+
+          {error && (
+            <p style={{ color: '#ef4444', marginTop: '10px', fontSize: '14px' }}>{error}</p>
+          )}
+
+          <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '20px' }}>
+            Crie seu token em: github.com/settings/tokens
           </p>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="p-6" glow>
-            <div className="flex items-center justify-between mb-4">
-              <FolderOpen className="w-8 h-8 text-lore-purple" />
-              <span className="text-3xl font-bold">{repos.length}</span>
+      ) : (
+        <div>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '20px',
+            background: '#131320',
+            padding: '15px',
+            borderRadius: '10px',
+            border: '1px solid #2a2a3e',
+          }}>
+            <div>
+              <h2 style={{ color: 'white', fontSize: '18px' }}>
+                Bem-vindo, {user?.login}
+              </h2>
+              <p style={{ color: '#9ca3af', fontSize: '14px' }}>
+                {repos.length} repositórios encontrados
+              </p>
             </div>
-            <h3 className="text-lg font-semibold mb-1">Projetos</h3>
-            <p className="text-sm text-gray-400">Repositórios conectados</p>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <GitCommit className="w-8 h-8 text-lore-purple" />
-              <span className="text-3xl font-bold">0</span>
-            </div>
-            <h3 className="text-lg font-semibold mb-1">Commits</h3>
-            <p className="text-sm text-gray-400">Alterações realizadas</p>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <Zap className="w-8 h-8 text-lore-purple" />
-              <span className="text-3xl font-bold">0</span>
-            </div>
-            <h3 className="text-lg font-semibold mb-1">IA</h3>
-            <p className="text-sm text-gray-400">Modificações geradas</p>
-          </Card>
-        </div>
-
-        <div className="mb-6">
-          <Input
-            placeholder="Pesquisar repositórios..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Spinner size="lg" />
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '8px 16px',
+                background: '#ef4444',
+                border: 'none',
+                borderRadius: '6px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              Sair
+            </button>
           </div>
-        ) : error ? (
-          <Card className="p-6 text-center">
-            <p className="text-red-400 mb-4">{error}</p>
-            <Button onClick={loadRepositories}>Tentar novamente</Button>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredRepos.map((repo) => (
-              <Card
+
+          {/* Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '20px' }}>
+            <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '20px' }}>
+              <FolderOpen size={24} color="#8b5cf6" style={{ marginBottom: '10px' }} />
+              <h3 style={{ color: 'white', fontSize: '24px', marginBottom: '5px' }}>{repos.length}</h3>
+              <p style={{ color: '#9ca3af', fontSize: '14px' }}>Projetos</p>
+            </div>
+            <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '20px' }}>
+              <GitCommit size={24} color="#8b5cf6" style={{ marginBottom: '10px' }} />
+              <h3 style={{ color: 'white', fontSize: '24px', marginBottom: '5px' }}>0</h3>
+              <p style={{ color: '#9ca3af', fontSize: '14px' }}>Commits</p>
+            </div>
+            <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '20px' }}>
+              <Zap size={24} color="#8b5cf6" style={{ marginBottom: '10px' }} />
+              <h3 style={{ color: 'white', fontSize: '24px', marginBottom: '5px' }}>0</h3>
+              <p style={{ color: '#9ca3af', fontSize: '14px' }}>Alterações IA</p>
+            </div>
+          </div>
+
+          {/* Repositories */}
+          <div style={{ display: 'grid', gap: '15px' }}>
+            {repos.map((repo) => (
+              <div
                 key={repo.id}
-                className="p-6 hover:border-lore-purple/50"
-                onClick={() => handleSelectRepo(repo)}
-                glow
+                style={{
+                  background: '#131320',
+                  border: '1px solid #2a2a3e',
+                  borderRadius: '10px',
+                  padding: '20px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#8b5cf6';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#2a2a3e';
+                }}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-2">
-                    <Github className="w-5 h-5 text-lore-purple" />
-                    <h3 className="font-semibold">{repo.name}</h3>
-                  </div>
-                  {repo.private && (
-                    <span className="px-2 py-1 text-xs bg-yellow-500/20 text-yellow-400 rounded">
-                      Privado
-                    </span>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                  <Github size={18} color="#8b5cf6" style={{ marginRight: '10px' }} />
+                  <h3 style={{ color: 'white', fontSize: '18px' }}>{repo.name}</h3>
                 </div>
-                <p className="text-sm text-gray-400 mb-4">
+                <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '10px' }}>
                   {repo.description || 'Sem descrição'}
                 </p>
-                <div className="flex items-center justify-between text-sm text-gray-500">
-                  <span>{repo.language}</span>
-                  <span>{formatDate(repo.updatedAt)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#6b7280', fontSize: '12px' }}>
+                    {repo.language || 'Unknown'}
+                  </span>
+                  <span style={{ color: '#6b7280', fontSize: '12px' }}>
+                    {new Date(repo.updated_at).toLocaleDateString('pt-BR')}
+                  </span>
                 </div>
-                <div className="mt-4 flex justify-end">
-                  <ArrowRight className="w-5 h-5 text-lore-purple" />
-                </div>
-              </Card>
+              </div>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
