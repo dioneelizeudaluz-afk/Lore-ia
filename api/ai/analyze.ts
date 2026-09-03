@@ -11,11 +11,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Prompt é obrigatório' });
   }
 
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({ 
-      error: 'Groq não configurado.' 
+      error: 'OpenRouter não configurado. Adicione OPENROUTER_API_KEY na Vercel.' 
     });
   }
 
@@ -33,13 +33,13 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
 
     const fullPrompt = systemPrompt + '\n\nPEDIDO:\n' + prompt;
 
-    // Modelos atuais do Groq (2025)
+    // Modelos gratuitos do OpenRouter (não mudam)
     const models = [
-      'llama-3.3-70b-versatile',
-      'llama-3.1-8b-instant',
-      'llama-3.1-70b-versatile',
-      'mixtral-8x7b-32768',
-      'gemma2-9b-it',
+      'google/gemini-2.0-flash-exp:free',
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'mistralai/mistral-7b-instruct:free',
+      'openchat/openchat-7b:free',
+      'huggingfaceh4/zephyr-7b-beta:free',
     ];
 
     let aiResponse = '';
@@ -47,11 +47,13 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
 
     for (const model of models) {
       try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
+            'HTTP-Referer': 'https://lore-ia.vercel.app',
+            'X-Title': 'Lore-IA',
           },
           body: JSON.stringify({
             model: model,
@@ -79,10 +81,10 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
     }
 
     return res.status(500).json({ 
-      error: 'Groq indisponível: ' + lastError.substring(0, 80)
+      error: 'OpenRouter indisponível: ' + lastError.substring(0, 80)
     });
 
   } catch (error) {
     return res.status(500).json({ error: 'Erro interno.' });
   }
-}
+      }
