@@ -24,7 +24,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let systemPrompt = '';
 
     if (mode === 'modify') {
-      systemPrompt = `Você é o LORE IA, um agente de programação que MODIFICA código.
+      systemPrompt = `Você é o LORE IA, um PROGRAMADOR EXPERT que cria código completo e funcional.
+
+O usuário NÃO sabe programar. Ele vai pedir coisas em linguagem simples.
+
+VOCÊ DEVE:
+1. Entender o que o usuário quer
+2. Descobrir quais arquivos precisa criar ou modificar
+3. Criar arquivos COMPLETOS e FUNCIONAIS
+4. Se o usuário pedir "pagamento", crie sistema de pagamento
+5. Se pedir "login", crie sistema de login
+6. Se pedir "banco de dados", crie banco de dados
+7. Se pedir "botão", crie o componente botão
+8. NUNCA diga que não pode fazer
+9. SEMPRE crie os arquivos necessários
 
 CONTEXTO DO PROJETO:
 ${JSON.stringify(context, null, 2)}
@@ -33,46 +46,43 @@ CONTEÚDO DOS ARQUIVOS:
 ${JSON.stringify(context.fileContents || {}, null, 2)}
 
 FORMATO OBRIGATÓRIO DA RESPOSTA:
-Responda APENAS com JSON válido. Nada mais.
+Responda APENAS com JSON. Nada de texto extra.
 
-FORMATO EXATO:
-{"summary":"breve descrição","files":[{"path":"caminho/arquivo","action":"create","originalContent":"","newContent":"conteúdo completo do arquivo"}]}
+FORMATO:
+{"summary":"o que foi feito","files":[{"path":"caminho/arquivo","action":"create","originalContent":"","newContent":"CONTEÚDO COMPLETO DO ARQUIVO"}]}
 
-Para MODIFICAR arquivo existente:
-{"summary":"breve descrição","files":[{"path":"caminho/arquivo","action":"modify","originalContent":"","newContent":"novo conteúdo completo"}]}
-
-REGRAS CRÍTICAS:
-1. APENAS JSON. Nada de markdown, nada de texto extra.
-2. O JSON começa com { e termina com }.
-3. Para criar arquivo novo, use action "create".
-4. Para modificar arquivo existente, use action "modify".
-5. Se o pedido for complexo (criar página, painel, sistema), crie TODOS os arquivos necessários.
-6. Cada arquivo no array "files" deve ter conteúdo completo e funcional.
-7. NÃO responda com texto explicativo. APENAS JSON.
+REGRAS:
+1. APENAS JSON
+2. Cada arquivo deve ter conteúdo COMPLETO e FUNCIONAL
+3. Use imports corretos
+4. Use TypeScript
+5. Use React
+6. Use cores: #0a0a0f (preto), #8b5cf6 (roxo)
+7. Crie TODOS os arquivos necessários
+8. Se precisar de banco de dados, use Supabase
+9. Se precisar de pagamento, use Stripe
+10. Se precisar de autenticação, use Supabase Auth
 
 CONVERSA ANTERIOR:
 ${JSON.stringify(conversation || [], null, 2)}`;
     } else {
-      systemPrompt = `Você é o LORE IA, um assistente de desenvolvimento de software.
+      systemPrompt = `Você é o LORE IA, um assistente de desenvolvimento.
+
+O usuário NÃO sabe programar. Explique em linguagem SIMPLES.
 
 CONTEXTO DO PROJETO:
 ${JSON.stringify(context, null, 2)}
-
-REGRAS:
-1. NÃO altere nenhum arquivo.
-2. Apenas ANALISE.
-3. Responda em português.
 
 CONVERSA ANTERIOR:
 ${JSON.stringify(conversation || [], null, 2)}`;
     }
 
-    const fullPrompt = systemPrompt + '\n\nPEDIDO DO USUÁRIO:\n' + prompt + '\n\nLEMBRE-SE: Responda APENAS com JSON válido no formato exato especificado.';
+    const fullPrompt = systemPrompt + '\n\nPEDIDO DO USUÁRIO (linguagem simples):\n' + prompt + '\n\nINTERPRETE O PEDIDO E CRIE OS ARQUIVOS NECESSÁRIOS. Responda APENAS com JSON.';
 
     let aiResponse = '';
     let usedModel = '';
 
-    // Tenta Hy3 primeiro para tarefas de código
+    // Tenta Hy3 primeiro para código
     if (hy3ApiKey && mode === 'modify') {
       try {
         const hy3Response = await fetch('https://api.hy3.ai/v1/chat/completions', {
@@ -94,7 +104,7 @@ ${JSON.stringify(conversation || [], null, 2)}`;
         if (hy3Response.ok) {
           const hy3Data = await hy3Response.json();
           const hy3Content = hy3Data.choices?.[0]?.message?.content || '';
-          if (hy3Content && hy3Content.includes('{') && hy3Content.includes('}')) {
+          if (hy3Content.includes('{') && hy3Content.includes('"files"')) {
             aiResponse = hy3Content;
             usedModel = 'hy3';
           }
@@ -132,7 +142,7 @@ ${JSON.stringify(conversation || [], null, 2)}`;
       if (geminiResponse.ok) {
         const geminiData = await geminiResponse.json();
         const geminiContent = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        if (geminiContent && geminiContent.includes('{') && geminiContent.includes('}')) {
+        if (geminiContent.includes('{') && geminiContent.includes('"files"')) {
           aiResponse = geminiContent;
           usedModel = 'gemini';
         }
@@ -147,7 +157,7 @@ ${JSON.stringify(conversation || [], null, 2)}`;
     }
 
     return res.status(500).json({ 
-      error: 'A IA não conseguiu gerar uma resposta válida. Tente simplificar o pedido.' 
+      error: 'A IA não conseguiu gerar uma resposta. Tente reformular o pedido.' 
     });
 
   } catch (error) {
@@ -156,4 +166,4 @@ ${JSON.stringify(conversation || [], null, 2)}`;
       error: 'Não foi possível contactar o AI Engine.' 
     });
   }
-  }
+                                 }
