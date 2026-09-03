@@ -37,59 +37,35 @@
             align-items: center;
             justify-content: center;
             z-index: 9999;
-            transition: opacity 0.5s ease;
+            transition: opacity 0.3s ease;
         }
-        #splash-screen.hidden {
-            opacity: 0;
-            pointer-events: none;
+        #splash-screen.hide {
+            display: none;
         }
         .splash-logo {
-            width: 120px;
-            height: 120px;
-            border-radius: 24px;
+            width: 100px;
+            height: 100px;
+            border-radius: 20px;
             background: linear-gradient(135deg, #8b5cf6, #7c3aed);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 48px;
+            font-size: 40px;
             font-weight: bold;
             color: white;
             margin-bottom: 20px;
-            box-shadow: 0 0 60px rgba(139, 92, 246, 0.5);
-            animation: pulse 2s ease-in-out infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 60px rgba(139, 92, 246, 0.5); }
-            50% { box-shadow: 0 0 100px rgba(139, 92, 246, 0.8); }
         }
         .splash-title {
-            font-size: 28px;
+            font-size: 24px;
             font-weight: bold;
-            background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 10px;
+            color: #8b5cf6;
+            margin-bottom: 8px;
         }
         .splash-subtitle {
-            font-size: 14px;
+            font-size: 13px;
             color: #9ca3af;
             text-align: center;
-            padding: 0 40px;
-            line-height: 1.5;
-        }
-        .splash-loading {
-            margin-top: 30px;
-            width: 40px;
-            height: 40px;
-            border: 3px solid #2a2a3e;
-            border-top: 3px solid #8b5cf6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            padding: 0 30px;
         }
     </style>
 </head>
@@ -98,31 +74,37 @@
         <div class="splash-logo">L</div>
         <div class="splash-title">Lore-IA</div>
         <div class="splash-subtitle">Seu código. Sua IA. Seu projeto.</div>
-        <div class="splash-loading"></div>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-        // Register Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then(() => console.log('Service Worker registrado'))
-                    .catch((err) => console.log('Erro ao registrar SW:', err));
-            });
-        }
+        // Esconder splash screen após 2 segundos
+        setTimeout(function() {
+            var splash = document.getElementById('splash-screen');
+            if (splash) {
+                splash.classList.add('hide');
+            }
+        }, 2000);
 
-        // Hide splash screen after load
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                document.getElementById('splash-screen').classList.add('hidden');
-            }, 2000);
+        // Também esconder quando a página carregar
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                var splash = document.getElementById('splash-screen');
+                if (splash) {
+                    splash.classList.add('hide');
+                }
+            }, 500);
         });
 
-        // Fallback: hide splash after 5 seconds max
-        setTimeout(() => {
-            document.getElementById('splash-screen').classList.add('hidden');
-        }, 5000);
+        // Registrar Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js')
+                    .catch(function() {
+                        // Silent fail
+                    });
+            });
+        }
     </script>
 </body>
 </html>
