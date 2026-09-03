@@ -634,10 +634,22 @@ export const Dashboard: React.FC = () => {
 
       if (response.ok && data.response) {
         try {
-          const cleaned = data.response.replace(/```json/gi, '').replace(/```/g, '').trim();
+          let cleaned = data.response.trim();
+          
+          cleaned = cleaned.replace(/```json/gi, '');
+          cleaned = cleaned.replace(/```/g, '');
+          cleaned = cleaned.trim();
+          
+          const jsonStart = cleaned.indexOf('{');
+          const jsonEnd = cleaned.lastIndexOf('}');
+          
+          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+            cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+          }
+          
           const parsed = JSON.parse(cleaned);
           
-          if (parsed.files && Array.isArray(parsed.files)) {
+          if (parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
             setModificationPlan(parsed);
             setShowDiff(true);
             setAiMessages(prev => [...prev, { 
@@ -647,13 +659,14 @@ export const Dashboard: React.FC = () => {
           } else {
             setAiMessages(prev => [...prev, { 
               role: 'assistant', 
-              content: 'Não foi possível gerar alterações estruturadas. Tente novamente.' 
+              content: 'A IA respondeu mas não consegui identificar as alterações. Tente ser mais específico no pedido.' 
             }]);
           }
         } catch (parseErr) {
+          console.error('Parse error:', parseErr);
           setAiMessages(prev => [...prev, { 
             role: 'assistant', 
-            content: data.response 
+            content: 'Erro ao processar resposta da IA. Tente novamente com um pedido mais específico.' 
           }]);
         }
       } else {
@@ -670,7 +683,6 @@ export const Dashboard: React.FC = () => {
     if (!plan) return 'Update project files';
     
     const summary = plan.summary || '';
-    const files = plan.files || [];
     
     if (summary.toLowerCase().includes('fix') || summary.toLowerCase().includes('corrig')) {
       return `fix: ${summary}`;
