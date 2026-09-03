@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!apiKey) {
     return res.status(500).json({ 
-      error: 'OpenRouter não configurado. Adicione OPENROUTER_API_KEY na Vercel.' 
+      error: 'OpenRouter não configurado.' 
     });
   }
 
@@ -33,13 +33,14 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
 
     const fullPrompt = systemPrompt + '\n\nPEDIDO:\n' + prompt;
 
-    // Modelos gratuitos do OpenRouter (não mudam)
+    // Modelos gratuitos CONFIRMADOS do OpenRouter
     const models = [
       'google/gemini-2.0-flash-exp:free',
       'meta-llama/llama-3.2-3b-instruct:free',
       'mistralai/mistral-7b-instruct:free',
       'openchat/openchat-7b:free',
-      'huggingfaceh4/zephyr-7b-beta:free',
+      'qwen/qwen-2.5-7b-instruct:free',
+      'deepseek/deepseek-chat:free',
     ];
 
     let aiResponse = '';
@@ -81,10 +82,10 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
     }
 
     return res.status(500).json({ 
-      error: 'OpenRouter indisponível: ' + lastError.substring(0, 80)
+      error: 'Todos os modelos falharam. Último erro: ' + lastError.substring(0, 80)
     });
 
   } catch (error) {
     return res.status(500).json({ error: 'Erro interno.' });
   }
-      }
+          }
