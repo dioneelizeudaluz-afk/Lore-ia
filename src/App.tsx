@@ -1,28 +1,38 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { MainLayout } from '@/components/layout/MainLayout';
-import { Dashboard } from '@/pages/Dashboard';
-import { ProjectView } from '@/pages/ProjectView';
-import { Settings } from '@/pages/Settings';
-import { History } from '@/pages/History';
-import { useAppStore } from '@/stores/appStore';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { Dashboard } from './pages/Dashboard';
+import { Projects } from './pages/Projects';
+import { Branches } from './pages/Branches';
 
 function App() {
-  const { token } = useAppStore();
-
   return (
     <Router>
-      <MainLayout>
+      <div style={{ background: '#0a0a0f', minHeight: '100vh' }}>
+        <nav style={{
+          background: '#131320',
+          padding: '15px',
+          borderBottom: '1px solid #2a2a3e',
+          display: 'flex',
+          gap: '20px',
+          flexWrap: 'wrap',
+        }}>
+          <Link to="/" style={{ color: '#8b5cf6', textDecoration: 'none', fontSize: '16px' }}>
+            Dashboard
+          </Link>
+          <Link to="/projects" style={{ color: '#8b5cf6', textDecoration: 'none', fontSize: '16px' }}>
+            Projetos
+          </Link>
+          <Link to="/branches" style={{ color: '#8b5cf6', textDecoration: 'none', fontSize: '16px' }}>
+            Branches
+          </Link>
+        </nav>
+
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route
-            path="/project/:repoId"
-            element={token ? <ProjectView /> : <Navigate to="/" />}
-          />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/history" element={<History />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/branches" element={<Branches />} />
         </Routes>
-      </MainLayout>
+      </div>
     </Router>
   );
 }
