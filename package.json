@@ -6,9 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:init": "cap init Lore-IA com.loreia.app --web-dir=dist",
+    "cap:add": "cap add android",
+    "cap:sync": "cap sync android",
+    "cap:build": "npm run build && cap sync android"
   },
   "dependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
     "@monaco-editor/react": "^4.6.0",
     "@octokit/rest": "^20.0.2",
     "lucide-react": "^0.309.0",
