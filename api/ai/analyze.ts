@@ -88,4 +88,4 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
   } catch (error) {
     return res.status(500).json({ error: 'Erro interno.' });
   }
-          }
+              }
