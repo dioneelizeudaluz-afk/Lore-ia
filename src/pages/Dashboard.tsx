@@ -692,25 +692,82 @@ CREATE TABLE IF NOT EXISTS commits (
 
       const data = await response.json();
 
-      if (response.ok && data.response) {
-        setAiMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
-      } else {
-        setAiError(data.error || 'Erro ao contactar AI Engine');
-        setAiMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: data.error || 'Não foi possível contactar o AI Engine.' 
-        }]);
-      }
-    } catch (err) {
-      setAiError('Erro ao contactar AI Engine');
-      setAiMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Não foi possível contactar o AI Engine.' 
-      }]);
-    } finally {
-      setAiLoading(false);
-    }
-  };
+            if (response.ok && data.response) {
+        try {
+          let cleaned = data.response.trim();
+          
+          // Remove markdown code blocks
+          cleaned = cleaned.replace(/```json/gi, '');
+          cleaned = cleaned.replace(/```/g, '');
+          cleaned = cleaned.trim();
+          
+          // Find JSON
+          const jsonStart = cleaned.indexOf('{');
+          const jsonEnd = cleaned.lastIndexOf('}');
+          
+          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+            cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+          }
+          
+          let parsed;
+          try {
+            parsed = JSON.parse(cleaned);
+          } catch (e) {
+            // Se falhar, tenta extrair apenas a parte files
+            const filesMatch = cleaned.match(/"files"\s*:\s*\[[\s\S]*\]/);
+            if (filesMatch) {
+              const filesStr = filesMatch[0];
+              const summaryMatch = cleaned.match(/"summary"\s*:\s*"([^"]*)"/);
+              const summary = summaryMatch ? summaryMatch[1] : 'Alterações';
+              
+              // Tenta parsear os arquivos
+              const filesArrayMatch = filesMatch[0].match(/\[[\s\S]*\]/);
+              if (filesArrayMatch) {
+                try {
+                  const files = JSON.parse(filesArrayMatch[0]);
+                  parsed = { summary, files };
+                } catch (e2) {
+                  parsed = null;
+                }
+              }
+            }
+          }
+          
+          if (parsed && parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
+            // Garante que cada arquivo tem os campos necessários
+            const validFiles = parsed.files.filter((file: any) => 
+              file && file.path && file.action && (file.newContent || file.action === 'delete')
+            );
+            
+            if (validFiles.length > 0) {
+              setModificationPlan({ ...parsed, files: validFiles });
+              setShowDiff(true);
+              setAiMessages(prev => [...prev, { 
+                role: 'assistant', 
+                content: `Plano gerado! ${parsed.summary || ''}\n\n${validFiles.length} arquivo(s) serão alterados. Revise o Diff.` 
+              }]);
+            } else {
+              setAiMessages(prev => [...prev, { 
+                role: 'assistant', 
+                content: data.response 
+              }]);
+            }
+          } else {
+            // Mostra a resposta como texto
+            setAiMessages(prev => [...prev, { 
+              role: 'assistant', 
+              content: data.response 
+            }]);
+          }
+        } catch (parseErr) {
+          console.error('Parse error:', parseErr);
+          // Mostra a resposta bruta
+          setAiMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: data.response 
+          }]);
+        }
+          }
 
   const generateModification = async () => {
     if (!aiPrompt.trim() || aiLoading || !selectedRepo) return;
