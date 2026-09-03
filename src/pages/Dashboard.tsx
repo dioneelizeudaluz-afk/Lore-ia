@@ -364,13 +364,153 @@ export const Dashboard: React.FC = () => {
     setShowCommitModal(false);
   };
 
-  const openRepository = (repo: any) => {
+    const openRepository = async (repo: any) => {
     setSelectedRepo(repo);
     setShowFiles(false);
     setFileTree([]);
     setAiOpen(false);
     setModificationPlan(null);
     setShowDiff(false);
+    
+    // Verificar e criar banco de dados automaticamente
+    await ensureDatabaseFiles(repo);
+  };
+
+  const ensureDatabaseFiles = async (repo: any) => {
+    const githubToken = localStorage.getItem('github_token');
+    if (!githubToken) return;
+
+    const filesToCheck = [
+      {
+        path: 'src/services/database.ts',
+        content: `import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export async function getUsers() {
+  const { data, error } = await supabase.from('users').select('*');
+  if (error) console.error('Erro ao buscar usuários:', error);
+  return data || [];
+}
+
+export async function saveUser(user: any) {
+  return await supabase.from('users').insert([user]);
+}
+
+export async function updateUser(id: number, updates: any) {
+  return await supabase.from('users').update(updates).eq('id', id);
+}
+
+export async function deleteUser(id: number) {
+  return await supabase.from('users').delete().eq('id', id);
+}
+
+export async function getProjects() {
+  const { data, error } = await supabase.from('projects').select('*');
+  if (error) console.error('Erro ao buscar projetos:', error);
+  return data || [];
+}
+
+export async function saveProject(project: any) {
+  return await supabase.from('projects').insert([project]);
+}
+
+export async function getSettings() {
+  const { data, error } = await supabase.from('settings').select('*');
+  if (error) console.error('Erro ao buscar configurações:', error);
+  return data || [];
+}
+
+export async function saveSettings(settings: any) {
+  return await supabase.from('settings').insert([settings]);
+}
+
+export async function getCommits() {
+  const { data, error } = await supabase.from('commits').select('*');
+  if (error) console.error('Erro ao buscar commits:', error);
+  return data || [];
+}
+
+export async function saveCommit(commit: any) {
+  return await supabase.from('commits').insert([commit]);
+}`,
+      },
+      {
+        path: 'supabase/schema.sql',
+        content: `-- Schema do banco de dados
+-- Execute este arquivo no Supabase SQL Editor
+
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  name TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  repo_url TEXT,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  id SERIAL PRIMARY KEY,
+  ai_provider TEXT DEFAULT 'gemini',
+  ai_model TEXT DEFAULT 'gemini-3.6-flash',
+  theme TEXT DEFAULT 'dark',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS commits (
+  id SERIAL PRIMARY KEY,
+  project_name TEXT,
+  message TEXT,
+  sha TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);`,
+      },
+    ];
+
+    for (const file of filesToCheck) {
+      try {
+        // Verificar se o arquivo existe
+        const checkResponse = await fetch(
+          `https://api.github.com/repos/${repo.full_name}/contents/${file.path}?ref=${repo.default_branch}`,
+          {
+            headers: {
+              'Authorization': `token ${githubToken}`,
+              'Accept': 'application/vnd.github.v3+json',
+            },
+          }
+        );
+
+        if (checkResponse.status === 404) {
+          // Arquivo não existe, criar
+          const createResponse = await fetch(
+            `https://api.github.com/repos/${repo.full_name}/contents/${file.path}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Authorization': `token ${githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                message: `feat: adicionar ${file.path}`,
+                content: btoa(unescape(encodeURIComponent(file.content))),
+                branch: repo.default_branch,
+              }),
+            }
+          );
+        }
+      } catch (err) {
+        console.log('Erro ao verificar arquivo:', file.path);
+      }
+    }
   };
 
   const loadFileTree = async () => {
