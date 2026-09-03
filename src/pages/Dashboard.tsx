@@ -247,7 +247,7 @@ export const Dashboard: React.FC = () => {
   const [aiMessages, setAiMessages] = useState<any[]>([
     {
       role: 'assistant',
-      content: 'Olá! Sou o LORE IA. Posso analisar seu projeto e criar planos de alteração. O que deseja fazer?',
+      content: 'Olá! Sou o LORE IA. Pode me pedir qualquer coisa em linguagem simples.',
     },
   ]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -354,7 +354,7 @@ export const Dashboard: React.FC = () => {
     setAiMessages([
       {
         role: 'assistant',
-        content: 'Olá! Sou o LORE IA. Posso analisar seu projeto e criar planos de alteração. O que deseja fazer?',
+        content: 'Olá! Sou o LORE IA. Pode me pedir qualquer coisa em linguagem simples.',
       },
     ]);
     setAiOpen(false);
@@ -364,153 +364,13 @@ export const Dashboard: React.FC = () => {
     setShowCommitModal(false);
   };
 
-    const openRepository = async (repo: any) => {
+  const openRepository = (repo: any) => {
     setSelectedRepo(repo);
     setShowFiles(false);
     setFileTree([]);
     setAiOpen(false);
     setModificationPlan(null);
     setShowDiff(false);
-    
-    // Verificar e criar banco de dados automaticamente
-    await ensureDatabaseFiles(repo);
-  };
-
-  const ensureDatabaseFiles = async (repo: any) => {
-    const githubToken = localStorage.getItem('github_token');
-    if (!githubToken) return;
-
-    const filesToCheck = [
-      {
-        path: 'src/services/database.ts',
-        content: `import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export async function getUsers() {
-  const { data, error } = await supabase.from('users').select('*');
-  if (error) console.error('Erro ao buscar usuários:', error);
-  return data || [];
-}
-
-export async function saveUser(user: any) {
-  return await supabase.from('users').insert([user]);
-}
-
-export async function updateUser(id: number, updates: any) {
-  return await supabase.from('users').update(updates).eq('id', id);
-}
-
-export async function deleteUser(id: number) {
-  return await supabase.from('users').delete().eq('id', id);
-}
-
-export async function getProjects() {
-  const { data, error } = await supabase.from('projects').select('*');
-  if (error) console.error('Erro ao buscar projetos:', error);
-  return data || [];
-}
-
-export async function saveProject(project: any) {
-  return await supabase.from('projects').insert([project]);
-}
-
-export async function getSettings() {
-  const { data, error } = await supabase.from('settings').select('*');
-  if (error) console.error('Erro ao buscar configurações:', error);
-  return data || [];
-}
-
-export async function saveSettings(settings: any) {
-  return await supabase.from('settings').insert([settings]);
-}
-
-export async function getCommits() {
-  const { data, error } = await supabase.from('commits').select('*');
-  if (error) console.error('Erro ao buscar commits:', error);
-  return data || [];
-}
-
-export async function saveCommit(commit: any) {
-  return await supabase.from('commits').insert([commit]);
-}`,
-      },
-      {
-        path: 'supabase/schema.sql',
-        content: `-- Schema do banco de dados
--- Execute este arquivo no Supabase SQL Editor
-
-CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  name TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS projects (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
-  repo_url TEXT,
-  description TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS settings (
-  id SERIAL PRIMARY KEY,
-  ai_provider TEXT DEFAULT 'gemini',
-  ai_model TEXT DEFAULT 'gemini-3.6-flash',
-  theme TEXT DEFAULT 'dark',
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS commits (
-  id SERIAL PRIMARY KEY,
-  project_name TEXT,
-  message TEXT,
-  sha TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);`,
-      },
-    ];
-
-    for (const file of filesToCheck) {
-      try {
-        // Verificar se o arquivo existe
-        const checkResponse = await fetch(
-          `https://api.github.com/repos/${repo.full_name}/contents/${file.path}?ref=${repo.default_branch}`,
-          {
-            headers: {
-              'Authorization': `token ${githubToken}`,
-              'Accept': 'application/vnd.github.v3+json',
-            },
-          }
-        );
-
-        if (checkResponse.status === 404) {
-          // Arquivo não existe, criar
-          const createResponse = await fetch(
-            `https://api.github.com/repos/${repo.full_name}/contents/${file.path}`,
-            {
-              method: 'PUT',
-              headers: {
-                'Authorization': `token ${githubToken}`,
-                'Accept': 'application/vnd.github.v3+json',
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                message: `feat: adicionar ${file.path}`,
-                content: btoa(unescape(encodeURIComponent(file.content))),
-                branch: repo.default_branch,
-              }),
-            }
-          );
-        }
-      } catch (err) {
-        console.log('Erro ao verificar arquivo:', file.path);
-      }
-    }
   };
 
   const loadFileTree = async () => {
@@ -692,82 +552,23 @@ CREATE TABLE IF NOT EXISTS commits (
 
       const data = await response.json();
 
-            if (response.ok && data.response) {
-        try {
-          let cleaned = data.response.trim();
-          
-          // Remove markdown code blocks
-          cleaned = cleaned.replace(/```json/gi, '');
-          cleaned = cleaned.replace(/```/g, '');
-          cleaned = cleaned.trim();
-          
-          // Find JSON
-          const jsonStart = cleaned.indexOf('{');
-          const jsonEnd = cleaned.lastIndexOf('}');
-          
-          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-            cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
-          }
-          
-          let parsed;
-          try {
-            parsed = JSON.parse(cleaned);
-          } catch (e) {
-            // Se falhar, tenta extrair apenas a parte files
-            const filesMatch = cleaned.match(/"files"\s*:\s*\[[\s\S]*\]/);
-            if (filesMatch) {
-              const filesStr = filesMatch[0];
-              const summaryMatch = cleaned.match(/"summary"\s*:\s*"([^"]*)"/);
-              const summary = summaryMatch ? summaryMatch[1] : 'Alterações';
-              
-              // Tenta parsear os arquivos
-              const filesArrayMatch = filesMatch[0].match(/\[[\s\S]*\]/);
-              if (filesArrayMatch) {
-                try {
-                  const files = JSON.parse(filesArrayMatch[0]);
-                  parsed = { summary, files };
-                } catch (e2) {
-                  parsed = null;
-                }
-              }
-            }
-          }
-          
-          if (parsed && parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
-            // Garante que cada arquivo tem os campos necessários
-            const validFiles = parsed.files.filter((file: any) => 
-              file && file.path && file.action && (file.newContent || file.action === 'delete')
-            );
-            
-            if (validFiles.length > 0) {
-              setModificationPlan({ ...parsed, files: validFiles });
-              setShowDiff(true);
-              setAiMessages(prev => [...prev, { 
-                role: 'assistant', 
-                content: `Plano gerado! ${parsed.summary || ''}\n\n${validFiles.length} arquivo(s) serão alterados. Revise o Diff.` 
-              }]);
-            } else {
-              setAiMessages(prev => [...prev, { 
-                role: 'assistant', 
-                content: data.response 
-              }]);
-            }
-          } else {
-            // Mostra a resposta como texto
-            setAiMessages(prev => [...prev, { 
-              role: 'assistant', 
-              content: data.response 
-            }]);
-          }
-        } catch (parseErr) {
-          console.error('Parse error:', parseErr);
-          // Mostra a resposta bruta
-          setAiMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: data.response 
-          }]);
-        }
-          }
+      if (response.ok && data.response) {
+        setAiMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+      } else {
+        setAiMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: data.error || 'Erro ao contactar AI Engine.' 
+        }]);
+      }
+    } catch (err) {
+      setAiMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Erro de conexão.' 
+      }]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const generateModification = async () => {
     if (!aiPrompt.trim() || aiLoading || !selectedRepo) return;
@@ -809,7 +610,7 @@ CREATE TABLE IF NOT EXISTS commits (
               }
             }
           } catch (err) {
-            // Skip file
+            // Skip
           }
         }
       }
@@ -830,47 +631,52 @@ CREATE TABLE IF NOT EXISTS commits (
       const data = await response.json();
 
       if (response.ok && data.response) {
+        const rawResponse = data.response;
+        
+        let parsed = null;
+        
         try {
-          let cleaned = data.response.trim();
-          
-          cleaned = cleaned.replace(/```json/gi, '');
-          cleaned = cleaned.replace(/```/g, '');
-          cleaned = cleaned.trim();
+          parsed = JSON.parse(rawResponse);
+        } catch (e1) {
+          let cleaned = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
           
           const jsonStart = cleaned.indexOf('{');
           const jsonEnd = cleaned.lastIndexOf('}');
           
           if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
             cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+            try {
+              parsed = JSON.parse(cleaned);
+            } catch (e2) {
+              parsed = null;
+            }
           }
-          
-          const parsed = JSON.parse(cleaned);
-          
-          if (parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
-            setModificationPlan(parsed);
-            setShowDiff(true);
-            setAiMessages(prev => [...prev, { 
-              role: 'assistant', 
-              content: `Plano gerado! ${parsed.summary || ''}\n\n${parsed.files.length} arquivo(s) serão alterados. Revise o Diff.` 
-            }]);
-          } else {
-            setAiMessages(prev => [...prev, { 
-              role: 'assistant', 
-              content: 'A IA respondeu mas não consegui identificar as alterações. Tente ser mais específico no pedido.' 
-            }]);
-          }
-        } catch (parseErr) {
-          console.error('Parse error:', parseErr);
+        }
+        
+        if (parsed && parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
+          setModificationPlan(parsed);
+          setShowDiff(true);
           setAiMessages(prev => [...prev, { 
             role: 'assistant', 
-            content: 'Erro ao processar resposta da IA. Tente novamente com um pedido mais específico.' 
+            content: `Plano gerado! ${parsed.summary || 'Alterações'}\n\n${parsed.files.length} arquivo(s) serão alterados.` 
+          }]);
+        } else {
+          setAiMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: rawResponse 
           }]);
         }
       } else {
-        setAiError(data.error || 'Erro ao contactar AI Engine');
+        setAiMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: data.error || 'Erro ao contactar AI Engine.' 
+        }]);
       }
     } catch (err) {
-      setAiError('Erro ao gerar alterações');
+      setAiMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Erro de conexão. Tente novamente.' 
+      }]);
     } finally {
       setAiLoading(false);
     }
@@ -1094,40 +900,21 @@ CREATE TABLE IF NOT EXISTS commits (
 
                 {file.action !== 'delete' && (
                   <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
-                    {file.originalContent && file.originalContent !== file.newContent && (
-                      <div style={{ marginBottom: '8px' }}>
-                        <p style={{ color: '#ef4444', margin: '0 0 5px' }}>--- Antes:</p>
-                        <pre style={{
-                          background: '#0a0a0f',
-                          padding: '8px',
-                          borderRadius: '4px',
-                          color: '#ef4444',
-                          margin: 0,
-                          maxHeight: '150px',
-                          overflowY: 'auto',
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-all',
-                        }}>
-                          {file.originalContent?.substring(0, 500)}
-                          {(file.originalContent?.length || 0) > 500 ? '...' : ''}
-                        </pre>
-                      </div>
-                    )}
                     <div>
-                      <p style={{ color: '#10b981', margin: '0 0 5px' }}>+++ Depois:</p>
+                      <p style={{ color: '#10b981', margin: '0 0 5px' }}>+++ Conteúdo:</p>
                       <pre style={{
                         background: '#0a0a0f',
                         padding: '8px',
                         borderRadius: '4px',
                         color: '#10b981',
                         margin: 0,
-                        maxHeight: '150px',
+                        maxHeight: '200px',
                         overflowY: 'auto',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-all',
                       }}>
-                        {file.newContent?.substring(0, 500)}
-                        {(file.newContent?.length || 0) > 500 ? '...' : ''}
+                        {file.newContent?.substring(0, 1000)}
+                        {(file.newContent?.length || 0) > 1000 ? '...' : ''}
                       </pre>
                     </div>
                   </div>
@@ -1554,7 +1341,7 @@ CREATE TABLE IF NOT EXISTS commits (
                     }}>
                       <Loader2 size={16} color="#8b5cf6" style={{ animation: 'spin 1s linear infinite' }} />
                       <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>
-                        LORE IA está analisando o projeto...
+                        LORE IA está pensando...
                       </p>
                     </div>
                   </div>
@@ -1572,7 +1359,7 @@ CREATE TABLE IF NOT EXISTS commits (
                       sendAIMessage();
                     }
                   }}
-                  placeholder="Descreva o que você quer analisar ou alterar..."
+                  placeholder="Digite o que você quer..."
                   style={{
                     flex: 1,
                     padding: '12px',
