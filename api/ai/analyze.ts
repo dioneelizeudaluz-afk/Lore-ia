@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!geminiApiKey && !hy3ApiKey) {
     return res.status(500).json({ 
-      error: 'Nenhum AI Engine configurado. Adicione GEMINI_API_KEY ou HY3_API_KEY.' 
+      error: 'Nenhum AI Engine configurado.' 
     });
   }
 
@@ -29,24 +29,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 CONTEXTO DO PROJETO:
 ${JSON.stringify(context, null, 2)}
 
-CONTEÚDO DOS ARQUIVOS RELEVANTES:
+CONTEÚDO DOS ARQUIVOS:
 ${JSON.stringify(context.fileContents || {}, null, 2)}
 
-IMPORTANTE - FORMATO DA RESPOSTA:
-Você DEVE responder APENAS com JSON puro, sem markdown, sem código, sem explicações.
+FORMATO OBRIGATÓRIO DA RESPOSTA:
+Responda APENAS com JSON válido. Nada mais.
 
-O JSON DEVE ter EXATAMENTE este formato:
-{"summary":"descrição curta","files":[{"path":"caminho/do/arquivo","action":"modify","originalContent":"conteúdo original","newContent":"conteúdo novo"}]}
+FORMATO EXATO:
+{"summary":"breve descrição","files":[{"path":"caminho/arquivo","action":"create","originalContent":"","newContent":"conteúdo completo do arquivo"}]}
 
-REGRAS:
-1. Responda APENAS JSON.
-2. NÃO use crases.
-3. NÃO use markdown.
-4. O JSON deve começar com { e terminar com }.
-5. Para criar arquivo, use action: "create" e originalContent: "".
-6. Para excluir, use action: "delete" e newContent: "".
-7. Preserve imports e lógica existente.
-8. Altere SOMENTE o necessário.
+Para MODIFICAR arquivo existente:
+{"summary":"breve descrição","files":[{"path":"caminho/arquivo","action":"modify","originalContent":"","newContent":"novo conteúdo completo"}]}
+
+REGRAS CRÍTICAS:
+1. APENAS JSON. Nada de markdown, nada de texto extra.
+2. O JSON começa com { e termina com }.
+3. Para criar arquivo novo, use action "create".
+4. Para modificar arquivo existente, use action "modify".
+5. Se o pedido for complexo (criar página, painel, sistema), crie TODOS os arquivos necessários.
+6. Cada arquivo no array "files" deve ter conteúdo completo e funcional.
+7. NÃO responda com texto explicativo. APENAS JSON.
 
 CONVERSA ANTERIOR:
 ${JSON.stringify(conversation || [], null, 2)}`;
@@ -58,21 +60,20 @@ ${JSON.stringify(context, null, 2)}
 
 REGRAS:
 1. NÃO altere nenhum arquivo.
-2. Apenas ANALISE e crie um PLANO.
+2. Apenas ANALISE.
 3. Responda em português.
-4. Seja objetivo e organizado.
 
 CONVERSA ANTERIOR:
 ${JSON.stringify(conversation || [], null, 2)}`;
     }
 
-    const fullPrompt = systemPrompt + '\n\nPEDIDO DO USUÁRIO:\n' + prompt;
+    const fullPrompt = systemPrompt + '\n\nPEDIDO DO USUÁRIO:\n' + prompt + '\n\nLEMBRE-SE: Responda APENAS com JSON válido no formato exato especificado.';
 
     let aiResponse = '';
     let usedModel = '';
 
-    // Se modo modify, tenta Hy3 primeiro (especialista em código)
-    if (mode === 'modify' && hy3ApiKey) {
+    // Tenta Hy3 primeiro para tarefas de código
+    if (hy3ApiKey && mode === 'modify') {
       try {
         const hy3Response = await fetch('https://api.hy3.ai/v1/chat/completions', {
           method: 'POST',
@@ -86,21 +87,24 @@ ${JSON.stringify(conversation || [], null, 2)}`;
               { role: 'user', content: fullPrompt }
             ],
             max_tokens: 8000,
-            temperature: 0.3,
+            temperature: 0.2,
           }),
         });
 
         if (hy3Response.ok) {
           const hy3Data = await hy3Response.json();
-          aiResponse = hy3Data.choices?.[0]?.message?.content || '';
-          usedModel = 'hy3';
+          const hy3Content = hy3Data.choices?.[0]?.message?.content || '';
+          if (hy3Content && hy3Content.includes('{') && hy3Content.includes('}')) {
+            aiResponse = hy3Content;
+            usedModel = 'hy3';
+          }
         }
       } catch (err) {
-        console.log('Hy3 falhou, tentando Gemini...');
+        console.log('Hy3 falhou');
       }
     }
 
-    // Se Hy3 falhou ou não foi usado, usa Gemini
+    // Fallback para Gemini
     if (!aiResponse && geminiApiKey) {
       const geminiResponse = await fetch(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + geminiApiKey,
@@ -118,7 +122,7 @@ ${JSON.stringify(conversation || [], null, 2)}`;
               }
             ],
             generationConfig: {
-              temperature: 0.3,
+              temperature: 0.2,
               maxOutputTokens: 8000,
             },
           }),
@@ -127,37 +131,11 @@ ${JSON.stringify(conversation || [], null, 2)}`;
 
       if (geminiResponse.ok) {
         const geminiData = await geminiResponse.json();
-        aiResponse = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        usedModel = 'gemini';
-      }
-    }
-
-    // Se modo analyze e Hy3 está disponível, usa Hy3 para análise de código
-    if (!aiResponse && hy3ApiKey) {
-      try {
-        const hy3Response = await fetch('https://api.hy3.ai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${hy3ApiKey}`,
-          },
-          body: JSON.stringify({
-            model: 'hy3-coder',
-            messages: [
-              { role: 'user', content: fullPrompt }
-            ],
-            max_tokens: 8000,
-            temperature: 0.3,
-          }),
-        });
-
-        if (hy3Response.ok) {
-          const hy3Data = await hy3Response.json();
-          aiResponse = hy3Data.choices?.[0]?.message?.content || '';
-          usedModel = 'hy3';
+        const geminiContent = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (geminiContent && geminiContent.includes('{') && geminiContent.includes('}')) {
+          aiResponse = geminiContent;
+          usedModel = 'gemini';
         }
-      } catch (err) {
-        console.log('Hy3 fallback falhou');
       }
     }
 
@@ -169,7 +147,7 @@ ${JSON.stringify(conversation || [], null, 2)}`;
     }
 
     return res.status(500).json({ 
-      error: 'Nenhum modelo de IA disponível. Tente novamente em alguns minutos.' 
+      error: 'A IA não conseguiu gerar uma resposta válida. Tente simplificar o pedido.' 
     });
 
   } catch (error) {
@@ -178,4 +156,4 @@ ${JSON.stringify(conversation || [], null, 2)}`;
       error: 'Não foi possível contactar o AI Engine.' 
     });
   }
-              }
+  }
