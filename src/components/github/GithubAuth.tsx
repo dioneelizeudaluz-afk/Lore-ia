@@ -1,16 +1,10 @@
 import React, { useState } from 'react';
-import { Github, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
-import { useAppStore } from '@/stores/appStore';
-import { githubService } from '@/services/github/githubService';
+import { Github } from 'lucide-react';
 
 export const GithubAuth: React.FC = () => {
-  const { setToken, setUser } = useAppStore();
   const [tokenInput, setTokenInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   const handleTokenAuth = async () => {
     if (!tokenInput.trim()) {
@@ -19,73 +13,103 @@ export const GithubAuth: React.FC = () => {
     }
 
     setLoading(true);
-    setError(null);
+    setError('');
 
     try {
-      githubService.setToken(tokenInput.trim());
-      const user = await githubService.getCurrentUser();
-      
-      setToken(tokenInput.trim());
-      setUser(user);
-      
-      setTokenInput('');
+      const response = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `token ${tokenInput.trim()}`,
+          'Accept': 'application/vnd.github.v3+json',
+        },
+      });
+
+      if (response.ok) {
+        const user = await response.json();
+        localStorage.setItem('github_token', tokenInput.trim());
+        localStorage.setItem('github_user', JSON.stringify(user));
+        window.location.href = '/';
+      } else {
+        setError('Token inválido ou expirado');
+      }
     } catch (err) {
-      console.error('Erro na autenticação:', err);
-      setError('Token inválido ou expirado');
+      setError('Erro ao conectar com GitHub');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-lore-black p-4">
-      <Card className="p-8 max-w-md w-full" glow>
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-lore-purple/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Github className="w-8 h-8 text-lore-purple" />
-          </div>
-          <h1 className="text-3xl font-bold mb-2">
-            LORE <span className="text-gradient">IA</span>
-          </h1>
-          <p className="text-gray-400">
-            Digite seu token do GitHub para começar
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      background: '#0a0a0f',
+      padding: '20px',
+    }}>
+      <div style={{
+        background: '#131320',
+        border: '1px solid #8b5cf6',
+        borderRadius: '12px',
+        padding: '30px',
+        maxWidth: '400px',
+        width: '100%',
+        textAlign: 'center',
+      }}>
+        <Github size={48} color="#8b5cf6" style={{ margin: '0 auto 20px' }} />
+        <h1 style={{ color: '#8b5cf6', fontSize: '28px', marginBottom: '10px' }}>
+          LORE IA
+        </h1>
+        <p style={{ color: '#9ca3af', marginBottom: '30px' }}>
+          Digite seu token do GitHub para começar
+        </p>
+
+        <input
+          type="password"
+          placeholder="ghp_xxxxxxxxxxxxxxxx"
+          value={tokenInput}
+          onChange={(e) => setTokenInput(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '12px',
+            background: '#1a1a2e',
+            border: '1px solid #8b5cf6',
+            borderRadius: '8px',
+            color: 'white',
+            fontSize: '16px',
+            marginBottom: '15px',
+            boxSizing: 'border-box',
+          }}
+        />
+
+        <button
+          onClick={handleTokenAuth}
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: '12px',
+            background: '#8b5cf6',
+            border: 'none',
+            borderRadius: '8px',
+            color: 'white',
+            fontSize: '16px',
+            cursor: 'pointer',
+            marginBottom: '15px',
+          }}
+        >
+          {loading ? 'Autenticando...' : 'Autenticar'}
+        </button>
+
+        {error && (
+          <p style={{ color: '#ef4444', fontSize: '14px' }}>
+            {error}
           </p>
-        </div>
+        )}
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">
-              Personal Access Token
-            </label>
-            <input
-              type="password"
-              placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg py-2 px-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-lore-purple/50"
-            />
-          </div>
-          
-          <button
-            onClick={handleTokenAuth}
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-lore-purple to-lore-violet text-white font-medium py-2 px-4 rounded-lg hover:shadow-lg hover:shadow-lore-purple/30 transition-all duration-200 disabled:opacity-50"
-          >
-            {loading ? 'Autenticando...' : 'Autenticar'}
-          </button>
-
-          {error && (
-            <div className="flex items-center space-x-2 text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <p className="text-sm">{error}</p>
-            </div>
-          )}
-
-          <p className="text-xs text-gray-500 text-center">
-            Token armazenado apenas no seu navegador
-          </p>
-        </div>
-      </Card>
+        <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '20px' }}>
+          Token armazenado apenas no seu navegador
+        </p>
+      </div>
     </div>
   );
 };
