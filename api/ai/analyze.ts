@@ -36,43 +36,67 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
 
     const fullPrompt = systemPrompt + '\n\nPEDIDO:\n' + prompt;
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          { role: 'user', content: fullPrompt }
-        ],
-        max_tokens: 8000,
-        temperature: 0.2,
-      }),
-    });
+    // Lista de modelos para tentar
+    const models = [
+      'llama-3.1-8b-instant',
+      'llama3-8b-8192',
+      'llama3-70b-8192',
+      'mixtral-8x7b-32768',
+      'gemma2-9b-it',
+      'gemma-7b-it',
+      'llama-3.1-70b-versatile',
+      'llama-3.3-70b-versatile',
+      'llama-3.2-3b-preview',
+      'llama-3.2-11b-vision-preview',
+    ];
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      return res.status(response.status).json({ 
-        error: errorData.error?.message || 'Erro ao contactar Groq' 
-      });
+    let aiResponse = '';
+    let lastError = '';
+
+    for (const model of models) {
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { role: 'user', content: fullPrompt }
+            ],
+            max_tokens: 8000,
+            temperature: 0.2,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          aiResponse = data.choices?.[0]?.message?.content || '';
+          if (aiResponse && aiResponse.trim().length > 0) {
+            break;
+          }
+        } else {
+          const errorData = await response.json();
+          lastError = errorData.error?.message || 'Erro';
+        }
+      } catch (err) {
+        lastError = 'Erro de conexão';
+      }
     }
-
-    const data = await response.json();
-    const aiResponse = data.choices?.[0]?.message?.content || '';
 
     if (aiResponse && aiResponse.trim().length > 0) {
       return res.status(200).json({ response: aiResponse });
     }
 
     return res.status(500).json({ 
-      error: 'Groq retornou resposta vazia. Tente novamente.' 
+      error: 'Nenhum modelo Groq disponível. Erro: ' + lastError.substring(0, 100)
     });
 
   } catch (error) {
     return res.status(500).json({ 
-      error: 'Erro de conexão com Groq. Tente novamente.' 
+      error: 'Erro de conexão com Groq.' 
     });
   }
-      }
+  }
