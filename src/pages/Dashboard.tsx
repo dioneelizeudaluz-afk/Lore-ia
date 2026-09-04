@@ -2,17 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Github, 
   FolderOpen, 
-  GitCommit, 
-  Zap, 
   ArrowRight, 
   FileCode, 
   Save, 
   X, 
   Check,
-  Sparkles,
-  Send,
-  Bot,
-  Loader2,
   Code
 } from 'lucide-react';
 
@@ -20,19 +14,13 @@ const FileEditor: React.FC<{
   filePath: string;
   fileName: string;
   content: string;
-  repoName: string;
-  branch: string;
   onClose: () => void;
   onSave: (path: string, content: string, message: string) => void;
-}> = ({ filePath, fileName, content, repoName, branch, onClose, onSave }) => {
+}> = ({ filePath, fileName, content, onClose, onSave }) => {
   const [editedContent, setEditedContent] = useState(content);
   const [commitMessage, setCommitMessage] = useState(`update: ${fileName}`);
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const handleSave = () => {
-    setShowConfirm(true);
-  };
 
   const confirmSave = () => {
     setSaving(true);
@@ -77,7 +65,7 @@ const FileEditor: React.FC<{
         </div>
         <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
           <button
-            onClick={handleSave}
+            onClick={() => setShowConfirm(true)}
             disabled={saving}
             style={{
               padding: '8px 15px',
@@ -244,23 +232,7 @@ export const Dashboard: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const [codeInput, setCodeInput] = useState('');
-  const [modificationPlan, setModificationPlan] = useState<any>(null);
-  const [showDiff, setShowDiff] = useState(false);
-  const [applyingChanges, setApplyingChanges] = useState(false);
-
-  const [deployStatus, setDeployStatus] = useState<{
-    step: string;
-    status: 'pending' | 'loading' | 'success' | 'error';
-    message: string;
-  }[]>([
-    { step: 'Alterações aplicadas', status: 'pending', message: '' },
-    { step: 'Commit criado', status: 'pending', message: '' },
-    { step: 'Push enviado para GitHub', status: 'pending', message: '' },
-    { step: 'Deploy acionado', status: 'pending', message: '' },
-  ]);
-  const [showDeployProgress, setShowDeployProgress] = useState(false);
-  const [commitMessageInput, setCommitMessageInput] = useState('');
-  const [showCommitModal, setShowCommitModal] = useState(false);
+  const [showCodeModal, setShowCodeModal] = useState(false);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('github_token');
@@ -320,7 +292,6 @@ export const Dashboard: React.FC = () => {
         setConnected(true);
         localStorage.setItem('github_token', token.trim());
         localStorage.setItem('github_user', JSON.stringify(userData));
-        
         await loadRepositories(token.trim());
       } else {
         setError('Token inválido ou expirado');
@@ -342,20 +313,12 @@ export const Dashboard: React.FC = () => {
     setFileTree([]);
     setShowFiles(false);
     setEditingFile(null);
-    setCodeInput('');
-    setModificationPlan(null);
-    setShowDiff(false);
-    setShowDeployProgress(false);
-    setShowCommitModal(false);
   };
 
   const openRepository = (repo: any) => {
     setSelectedRepo(repo);
     setShowFiles(false);
     setFileTree([]);
-    setCodeInput('');
-    setModificationPlan(null);
-    setShowDiff(false);
   };
 
   const loadFileTree = async () => {
@@ -481,11 +444,12 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const applyManualCode = async () => {
-    if (!codeInput.trim() || applyingChanges || !selectedRepo) return;
+  const applyCodeDirect = async () => {
+    if (!codeInput.trim() || !selectedRepo) return;
     
     const codeText = codeInput.trim();
     setCodeInput('');
+    setShowCodeModal(false);
     
     try {
       let parsed;
@@ -506,444 +470,71 @@ export const Dashboard: React.FC = () => {
         }
       }
       
-      if (parsed && parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
-        setModificationPlan(parsed);
-        setShowDiff(true);
+      if (parsed && parsed.files && Array.isArray(parsed.files)) {
+        const githubToken = localStorage.getItem('github_token');
+        if (!githubToken) return;
+
+        for (const file of parsed.files) {
+          const path = file.path;
+          const content = file.newContent || '';
+          
+          // Verifica se arquivo existe
+          const checkResponse = await fetch(
+            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${path}?ref=${selectedRepo.default_branch}`,
+            {
+              headers: {
+                'Authorization': `token ${githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+              },
+            }
+          );
+
+          let sha = null;
+          if (checkResponse.ok) {
+            const fileData = await checkResponse.json();
+            sha = fileData.sha;
+          }
+
+          const updateBody: any = {
+            message: parsed.summary || `update: ${path}`,
+            content: btoa(unescape(encodeURIComponent(content))),
+            branch: selectedRepo.default_branch,
+          };
+
+          if (sha) {
+            updateBody.sha = sha;
+          }
+
+          const updateResponse = await fetch(
+            `https://api.github.com/repos/${selectedRepo.full_name}/contents/${path}`,
+            {
+              method: 'PUT',
+              headers: {
+                'Authorization': `token ${githubToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(updateBody),
+            }
+          );
+
+          if (updateResponse.ok) {
+            showToast(`Arquivo ${path} criado/atualizado!`, 'success');
+          } else {
+            const errData = await updateResponse.json();
+            showToast(`Erro em ${path}: ${errData.message}`, 'error');
+          }
+        }
+
+        if (showFiles) {
+          await loadFileTree();
+        }
       } else {
-        showToast('JSON inválido. Verifique o formato.', 'error');
+        showToast('JSON inválido', 'error');
       }
     } catch (err) {
-      showToast('Erro ao processar código.', 'error');
+      showToast('Erro ao aplicar código', 'error');
     }
-  };
-
-  const generateCommitMessage = (plan: any): string => {
-    if (!plan) return 'Update project files';
-    const summary = plan.summary || '';
-    return `update: ${summary || 'project files'}`;
-  };
-
-  const commitAndPush = async () => {
-    if (!modificationPlan || !selectedRepo || applyingChanges) return;
-    
-    const githubToken = localStorage.getItem('github_token');
-    if (!githubToken) {
-      showToast('GitHub não conectado', 'error');
-      return;
-    }
-
-    setCommitMessageInput(generateCommitMessage(modificationPlan));
-    setShowCommitModal(true);
-  };
-
-  const confirmCommitAndPush = async () => {
-    if (!modificationPlan || !selectedRepo) return;
-    
-    const githubToken = localStorage.getItem('github_token');
-    if (!githubToken) return;
-
-    setShowCommitModal(false);
-    setShowDeployProgress(true);
-    setApplyingChanges(true);
-
-    setDeployStatus([
-      { step: 'Alterações aplicadas', status: 'loading', message: 'Aplicando alterações...' },
-      { step: 'Commit criado', status: 'pending', message: '' },
-      { step: 'Push enviado para GitHub', status: 'pending', message: '' },
-      { step: 'Deploy acionado', status: 'pending', message: '' },
-    ]);
-
-    try {
-      const changes = modificationPlan.files.map((file: any) => ({
-        path: file.path,
-        content: file.newContent || '',
-        action: file.action,
-      }));
-
-      const commitResponse = await fetch('/api/github/commit-and-push', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          repoFullName: selectedRepo.full_name,
-          branch: selectedRepo.default_branch,
-          githubToken: githubToken,
-          message: commitMessageInput || generateCommitMessage(modificationPlan),
-          changes: changes,
-        }),
-      });
-
-      const commitData = await commitResponse.json();
-
-      if (!commitResponse.ok) {
-        setDeployStatus(prev => prev.map((s, i) => 
-          i === 0 ? { ...s, status: 'error', message: commitData.error || 'Erro ao aplicar alterações' } : s
-        ));
-        showToast(commitData.error || 'Erro ao aplicar alterações', 'error');
-        return;
-      }
-
-      setDeployStatus(prev => prev.map((s, i) => 
-        i === 0 ? { ...s, status: 'success', message: 'Alterações aplicadas com sucesso' } :
-        i === 1 ? { ...s, status: 'success', message: `Commit: ${commitData.commitSha?.substring(0, 7) || 'criado'}` } :
-        i === 2 ? { ...s, status: 'success', message: 'Push enviado para GitHub' } :
-        i === 3 ? { ...s, status: 'success', message: 'Deploy acionado' } : s
-      ));
-
-      showToast('Alterações enviadas com sucesso!', 'success');
-
-      if (showFiles) {
-        await loadFileTree();
-      }
-    } catch (err) {
-      setDeployStatus(prev => prev.map((s, i) => 
-        s.status === 'loading' ? { ...s, status: 'error', message: 'Erro na operação' } : s
-      ));
-      showToast('Erro ao fazer commit e push', 'error');
-    } finally {
-      setApplyingChanges(false);
-      setModificationPlan(null);
-      setShowDiff(false);
-    }
-  };
-
-  const renderDiff = () => {
-    if (!modificationPlan || !showDiff) return null;
-
-    return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        background: 'rgba(0,0,0,0.9)',
-        zIndex: 2000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '10px',
-      }}>
-        <div style={{
-          background: '#131320',
-          border: '1px solid #8b5cf6',
-          borderRadius: '12px',
-          width: '100%',
-          maxWidth: '600px',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-        }}>
-          <div style={{
-            padding: '15px',
-            borderBottom: '1px solid #2a2a3e',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}>
-            <h3 style={{ color: 'white', fontSize: '16px', margin: 0 }}>
-              Diff - {modificationPlan.summary || 'Alterações'}
-            </h3>
-            <button
-              onClick={() => {
-                setShowDiff(false);
-                setModificationPlan(null);
-              }}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#9ca3af',
-                cursor: 'pointer',
-                fontSize: '20px',
-              }}
-            >
-              ✕
-            </button>
-          </div>
-
-          <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
-            {modificationPlan.files.map((file: any, index: number) => (
-              <div key={index} style={{
-                background: '#1a1a2e',
-                border: '1px solid #2a2a3e',
-                borderRadius: '8px',
-                padding: '12px',
-                marginBottom: '12px',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
-                  <span style={{
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    fontSize: '11px',
-                    fontWeight: 'bold',
-                    marginRight: '8px',
-                    background: file.action === 'create' ? '#10b981' : file.action === 'delete' ? '#ef4444' : '#8b5cf6',
-                    color: 'white',
-                  }}>
-                    {file.action === 'create' ? 'NOVO' : file.action === 'delete' ? 'EXCLUIR' : 'MODIFICAR'}
-                  </span>
-                  <span style={{ color: '#9ca3af', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {file.path}
-                  </span>
-                </div>
-
-                {file.action !== 'delete' && (
-                  <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
-                    <div>
-                      <p style={{ color: '#10b981', margin: '0 0 5px' }}>+++ Conteúdo:</p>
-                      <pre style={{
-                        background: '#0a0a0f',
-                        padding: '8px',
-                        borderRadius: '4px',
-                        color: '#10b981',
-                        margin: 0,
-                        maxHeight: '200px',
-                        overflowY: 'auto',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-all',
-                      }}>
-                        {file.newContent?.substring(0, 1000)}
-                      </pre>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div style={{
-            padding: '15px',
-            borderTop: '1px solid #2a2a3e',
-            display: 'flex',
-            gap: '10px',
-          }}>
-            <button
-              onClick={() => {
-                setShowDiff(false);
-                setModificationPlan(null);
-              }}
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: '#1a1a2e',
-                border: '1px solid #2a2a3e',
-                borderRadius: '8px',
-                color: '#9ca3af',
-                cursor: 'pointer',
-                fontSize: '14px',
-              }}
-            >
-              CANCELAR
-            </button>
-            <button
-              onClick={commitAndPush}
-              disabled={applyingChanges}
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: applyingChanges ? '#4b5563' : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-                border: 'none',
-                borderRadius: '8px',
-                color: 'white',
-                cursor: applyingChanges ? 'not-allowed' : 'pointer',
-                fontSize: '14px',
-                fontWeight: 'bold',
-              }}
-            >
-              {applyingChanges ? 'APLICANDO...' : 'APLICAR ALTERAÇÕES'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderCommitModal = () => {
-    if (!showCommitModal) return null;
-
-    return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        background: 'rgba(0,0,0,0.9)',
-        zIndex: 2500,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-      }}>
-        <div style={{
-          background: '#131320',
-          border: '1px solid #8b5cf6',
-          borderRadius: '12px',
-          padding: '25px',
-          maxWidth: '450px',
-          width: '100%',
-        }}>
-          <h3 style={{ color: 'white', fontSize: '18px', marginBottom: '15px' }}>
-            Commit e Push
-          </h3>
-          
-          <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '15px' }}>
-            {modificationPlan?.files?.length || 0} arquivo(s) serão enviados para:
-          </p>
-          
-          <p style={{ color: '#8b5cf6', fontSize: '14px', marginBottom: '15px' }}>
-            {selectedRepo?.full_name} ({selectedRepo?.default_branch})
-          </p>
-
-          <label style={{ color: '#9ca3af', fontSize: '13px', display: 'block', marginBottom: '8px' }}>
-            Mensagem do commit
-          </label>
-          <input
-            type="text"
-            value={commitMessageInput}
-            onChange={(e) => setCommitMessageInput(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: '#1a1a2e',
-              border: '1px solid #2a2a3e',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '14px',
-              marginBottom: '20px',
-              boxSizing: 'border-box',
-            }}
-          />
-
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              onClick={() => setShowCommitModal(false)}
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: '#1a1a2e',
-                border: '1px solid #2a2a3e',
-                borderRadius: '8px',
-                color: '#9ca3af',
-                cursor: 'pointer',
-                fontSize: '14px',
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={confirmCommitAndPush}
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-                border: 'none',
-                borderRadius: '8px',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: 'bold',
-              }}
-            >
-              COMMIT E PUSH
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderDeployProgress = () => {
-    if (!showDeployProgress) return null;
-
-    return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        background: 'rgba(0,0,0,0.9)',
-        zIndex: 2600,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-      }}>
-        <div style={{
-          background: '#131320',
-          border: '1px solid #8b5cf6',
-          borderRadius: '12px',
-          padding: '25px',
-          maxWidth: '450px',
-          width: '100%',
-        }}>
-          <h3 style={{ color: 'white', fontSize: '18px', marginBottom: '20px', textAlign: 'center' }}>
-            Publicando Alterações
-          </h3>
-
-          <div>
-            {deployStatus.map((step, index) => (
-              <div key={index} style={{
-                display: 'flex',
-                alignItems: 'center',
-                padding: '12px',
-                marginBottom: '10px',
-                background: '#1a1a2e',
-                borderRadius: '8px',
-                border: '1px solid #2a2a3e',
-              }}>
-                {step.status === 'success' && (
-                  <span style={{ color: '#10b981', fontSize: '20px', marginRight: '10px' }}>✓</span>
-                )}
-                {step.status === 'error' && (
-                  <span style={{ color: '#ef4444', fontSize: '20px', marginRight: '10px' }}>✗</span>
-                )}
-                {step.status === 'loading' && (
-                  <Loader2 size={20} color="#8b5cf6" style={{ marginRight: '10px', animation: 'spin 1s linear infinite' }} />
-                )}
-                {step.status === 'pending' && (
-                  <span style={{ color: '#4b5563', fontSize: '20px', marginRight: '10px' }}>○</span>
-                )}
-                <div>
-                  <p style={{ 
-                    color: step.status === 'success' ? '#10b981' : step.status === 'error' ? '#ef4444' : '#9ca3af',
-                    fontSize: '14px',
-                    margin: 0,
-                    fontWeight: 'bold',
-                  }}>
-                    {step.step}
-                  </p>
-                  {step.message && (
-                    <p style={{ color: '#6b7280', fontSize: '12px', margin: '5px 0 0' }}>
-                      {step.message}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setShowDeployProgress(false)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: '#1a1a2e',
-              border: '1px solid #2a2a3e',
-              borderRadius: '8px',
-              color: '#9ca3af',
-              cursor: 'pointer',
-              fontSize: '14px',
-              marginTop: '10px',
-            }}
-          >
-            Fechar
-          </button>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -1021,9 +612,6 @@ export const Dashboard: React.FC = () => {
               onClick={() => {
                 setSelectedRepo(null);
                 setShowFiles(false);
-                setCodeInput('');
-                setModificationPlan(null);
-                setShowDiff(false);
               }}
               style={{
                 padding: '8px 16px',
@@ -1041,69 +629,25 @@ export const Dashboard: React.FC = () => {
               <ArrowRight size={16} style={{ transform: 'rotate(180deg)' }} />
               Voltar
             </button>
-          </div>
-
-          {/* Campo de código manual */}
-          <div style={{
-            background: '#131320',
-            border: '1px solid #8b5cf6',
-            borderRadius: '10px',
-            padding: '15px',
-            marginBottom: '15px',
-          }}>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              marginBottom: '15px',
-              borderBottom: '1px solid #2a2a3e',
-              paddingBottom: '10px',
-            }}>
-              <Code size={20} color="#8b5cf6" style={{ marginRight: '10px' }} />
-              <h3 style={{ color: '#8b5cf6', fontSize: '16px', margin: 0 }}>
-                Aplicar Código
-              </h3>
-            </div>
-
-            <p style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '10px' }}>
-              Cole aqui o código JSON gerado pelo DeepSeek:
-            </p>
-
-            <textarea
-              value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value)}
-              placeholder='{"summary":"Mudar fundo para azul","files":[{"path":"src/index.css","action":"modify","originalContent":"","newContent":"body { background: #0066ff; }"}]}'
-              rows={6}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: '#1a1a2e',
-                border: '1px solid #2a2a3e',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '12px',
-                fontFamily: 'monospace',
-                boxSizing: 'border-box',
-                marginBottom: '10px',
-                resize: 'vertical',
-              }}
-            />
 
             <button
-              onClick={applyManualCode}
-              disabled={applyingChanges || !codeInput.trim()}
+              onClick={() => setShowCodeModal(true)}
               style={{
-                width: '100%',
-                padding: '12px',
-                background: applyingChanges || !codeInput.trim() ? '#4b5563' : '#10b981',
+                padding: '8px 16px',
+                background: '#10b981',
                 border: 'none',
-                borderRadius: '8px',
+                borderRadius: '6px',
                 color: 'white',
-                cursor: applyingChanges || !codeInput.trim() ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
                 fontSize: '14px',
                 fontWeight: 'bold',
               }}
             >
-              {applyingChanges ? 'APLICANDO...' : 'APLICAR CÓDIGO'}
+              <Code size={16} />
+              Aplicar Código
             </button>
           </div>
 
@@ -1205,14 +749,6 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '15px' }}>
-            <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '15px' }}>
-              <FolderOpen size={22} color="#8b5cf6" style={{ marginBottom: '8px' }} />
-              <h3 style={{ color: 'white', fontSize: '22px', margin: '0 0 5px' }}>{repos.length}</h3>
-              <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>Projetos</p>
-            </div>
-          </div>
-
           <div style={{ display: 'grid', gap: '12px' }}>
             {repos.map((repo) => (
               <div
@@ -1223,7 +759,6 @@ export const Dashboard: React.FC = () => {
                   borderRadius: '10px',
                   padding: '15px',
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
                 }}
                 onClick={() => openRepository(repo)}
               >
@@ -1247,21 +782,89 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Modal de código */}
+      {showCodeModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.9)',
+          zIndex: 2000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '15px',
+        }}>
+          <div style={{
+            background: '#131320',
+            border: '1px solid #8b5cf6',
+            borderRadius: '12px',
+            padding: '20px',
+            width: '100%',
+            maxWidth: '500px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h3 style={{ color: '#8b5cf6', fontSize: '16px', margin: 0 }}>Aplicar Código JSON</h3>
+              <button
+                onClick={() => setShowCodeModal(false)}
+                style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '20px' }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <textarea
+              value={codeInput}
+              onChange={(e) => setCodeInput(e.target.value)}
+              placeholder='{"summary":"Mudar fundo","files":[{"path":"src/index.css","action":"modify","originalContent":"","newContent":"body { background: blue; }"}]}'
+              rows={10}
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: '#1a1a2e',
+                border: '1px solid #2a2a3e',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                boxSizing: 'border-box',
+                marginBottom: '15px',
+                resize: 'vertical',
+              }}
+            />
+
+            <button
+              onClick={applyCodeDirect}
+              disabled={!codeInput.trim()}
+              style={{
+                width: '100%',
+                padding: '14px',
+                background: !codeInput.trim() ? '#4b5563' : '#10b981',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '15px',
+                fontWeight: 'bold',
+                cursor: !codeInput.trim() ? 'not-allowed' : 'pointer',
+              }}
+            >
+              APLICAR AGORA
+            </button>
+          </div>
+        </div>
+      )}
+
       {editingFile && (
         <FileEditor
           filePath={editingFile.path}
           fileName={editingFile.name}
           content={editingFile.content}
-          repoName={selectedRepo?.name || ''}
-          branch={selectedRepo?.default_branch || 'main'}
           onClose={() => setEditingFile(null)}
           onSave={saveFile}
         />
       )}
-
-      {renderDiff()}
-      {renderCommitModal()}
-      {renderDeployProgress()}
 
       {toast && (
         <div style={{
