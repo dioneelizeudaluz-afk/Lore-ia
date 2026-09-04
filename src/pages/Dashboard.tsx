@@ -1054,4 +1054,236 @@ export const Dashboard: React.FC = () => {
             <div style={{ 
               display: 'flex', 
               alignItems: 'center', 
-              margin
+              marginBottom: '15px',
+              borderBottom: '1px solid #2a2a3e',
+              paddingBottom: '10px',
+            }}>
+              <Code size={20} color="#8b5cf6" style={{ marginRight: '10px' }} />
+              <h3 style={{ color: '#8b5cf6', fontSize: '16px', margin: 0 }}>
+                Aplicar Código
+              </h3>
+            </div>
+
+            <p style={{ color: '#9ca3af', fontSize: '13px', marginBottom: '10px' }}>
+              Cole aqui o código JSON gerado pelo DeepSeek:
+            </p>
+
+            <textarea
+              value={codeInput}
+              onChange={(e) => setCodeInput(e.target.value)}
+              placeholder='{"summary":"Mudar fundo para azul","files":[{"path":"src/index.css","action":"modify","originalContent":"","newContent":"body { background: #0066ff; }"}]}'
+              rows={6}
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: '#1a1a2e',
+                border: '1px solid #2a2a3e',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                boxSizing: 'border-box',
+                marginBottom: '10px',
+                resize: 'vertical',
+              }}
+            />
+
+            <button
+              onClick={applyManualCode}
+              disabled={applyingChanges || !codeInput.trim()}
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: applyingChanges || !codeInput.trim() ? '#4b5563' : '#10b981',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'white',
+                cursor: applyingChanges || !codeInput.trim() ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: 'bold',
+              }}
+            >
+              {applyingChanges ? 'APLICANDO...' : 'APLICAR CÓDIGO'}
+            </button>
+          </div>
+
+          <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
+              <Github size={28} color="#8b5cf6" style={{ marginRight: '12px' }} />
+              <div>
+                <h2 style={{ color: 'white', fontSize: '20px', margin: 0 }}>{selectedRepo.name}</h2>
+                <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>{selectedRepo.full_name}</p>
+              </div>
+            </div>
+
+            {!showFiles ? (
+              <button
+                onClick={loadFileTree}
+                disabled={loadingFiles}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '15px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                }}
+              >
+                {loadingFiles ? 'Carregando...' : 'Ver Arquivos do Projeto'}
+              </button>
+            ) : (
+              <div>
+                <h3 style={{ color: 'white', fontSize: '16px', marginBottom: '15px' }}>
+                  Arquivos ({fileTree.length})
+                </h3>
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {fileTree.slice(0, 100).map((file: any) => (
+                    <button
+                      key={file.path}
+                      onClick={() => openFile(file.path)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        width: '100%',
+                        padding: '10px',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: '1px solid #1a1a2e',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <FileCode size={14} color="#8b5cf6" style={{ marginRight: '10px', flexShrink: 0 }} />
+                      <span style={{ color: '#9ca3af', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {file.path}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '15px',
+            background: '#131320',
+            padding: '15px',
+            borderRadius: '10px',
+            border: '1px solid #2a2a3e',
+            flexWrap: 'wrap',
+            gap: '10px',
+          }}>
+            <div>
+              <h2 style={{ color: 'white', fontSize: '18px', margin: 0 }}>
+                Bem-vindo, {user?.login}
+              </h2>
+              <p style={{ color: '#9ca3af', fontSize: '14px', margin: 0 }}>
+                {repos.length} repositórios encontrados
+              </p>
+            </div>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '8px 16px',
+                background: '#ef4444',
+                border: 'none',
+                borderRadius: '6px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              Sair
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '15px' }}>
+            <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '15px' }}>
+              <FolderOpen size={22} color="#8b5cf6" style={{ marginBottom: '8px' }} />
+              <h3 style={{ color: 'white', fontSize: '22px', margin: '0 0 5px' }}>{repos.length}</h3>
+              <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>Projetos</p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {repos.map((repo) => (
+              <div
+                key={repo.id}
+                style={{
+                  background: '#131320',
+                  border: '1px solid #2a2a3e',
+                  borderRadius: '10px',
+                  padding: '15px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onClick={() => openRepository(repo)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                    <Github size={18} color="#8b5cf6" style={{ marginRight: '10px', flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <h3 style={{ color: 'white', fontSize: '16px', margin: 0 }}>
+                        {repo.name}
+                      </h3>
+                      <p style={{ color: '#9ca3af', fontSize: '12px', margin: 0 }}>
+                        {repo.description || 'Sem descrição'}
+                      </p>
+                    </div>
+                  </div>
+                  <ArrowRight size={18} color="#8b5cf6" style={{ flexShrink: 0 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {editingFile && (
+        <FileEditor
+          filePath={editingFile.path}
+          fileName={editingFile.name}
+          content={editingFile.content}
+          repoName={selectedRepo?.name || ''}
+          branch={selectedRepo?.default_branch || 'main'}
+          onClose={() => setEditingFile(null)}
+          onSave={saveFile}
+        />
+      )}
+
+      {renderDiff()}
+      {renderCommitModal()}
+      {renderDeployProgress()}
+
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          background: toast.type === 'success' ? '#10b981' : '#ef4444',
+          color: 'white',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          zIndex: 3000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+        }}>
+          {toast.type === 'success' ? <Check size={18} /> : <X size={18} />}
+          {toast.message}
+        </div>
+      )}
+    </div>
+  );
+};
