@@ -1,379 +1,188 @@
 import React, { useState, useEffect } from 'react';
-import { Github, FolderOpen, ArrowRight, FileCode, Save, X, Check, Code } from 'lucide-react';
-
-const FileEditor: React.FC<{
-  filePath: string;
-  fileName: string;
-  content: string;
-  onClose: () => void;
-  onSave: (path: string, content: string, message: string) => void;
-}> = ({ filePath, fileName, content, onClose, onSave }) => {
-  const [editedContent, setEditedContent] = useState(content);
-  const [commitMessage, setCommitMessage] = useState(`update: ${fileName}`);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const confirmSave = () => {
-    setSaving(true);
-    onSave(filePath, editedContent, commitMessage);
-    setTimeout(() => {
-      setSaving(false);
-      setShowConfirm(false);
-      onClose();
-    }, 2000);
-  };
-
-  return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: '#0a0a0f', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ background: '#131320', borderBottom: '1px solid #2a2a3e', padding: '12px 15px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
-          <FileCode size={18} color="#8b5cf6" style={{ marginRight: '10px', flexShrink: 0 }} />
-          <div style={{ minWidth: 0 }}>
-            <p style={{ color: 'white', fontSize: '14px', fontWeight: 'bold', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fileName}</p>
-            <p style={{ color: '#6b7280', fontSize: '11px', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{filePath}</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-          <button onClick={() => setShowConfirm(true)} disabled={saving} style={{ padding: '8px 15px', background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', border: 'none', borderRadius: '6px', color: 'white', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <Save size={14} /> {saving ? 'Salvando...' : 'Salvar'}
-          </button>
-          <button onClick={onClose} style={{ padding: '8px', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer' }}>
-            <X size={16} />
-          </button>
-        </div>
-      </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '15px' }}>
-        <textarea value={editedContent} onChange={(e) => setEditedContent(e.target.value)} spellCheck={false} style={{ width: '100%', height: '100%', minHeight: '500px', background: '#131320', border: '1px solid #2a2a3e', borderRadius: '8px', color: '#e5e7eb', fontSize: '14px', fontFamily: 'monospace', padding: '15px', boxSizing: 'border-box', resize: 'vertical', lineHeight: '1.5', whiteSpace: 'pre', overflowX: 'auto' }} />
-      </div>
-      {showConfirm && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#131320', border: '1px solid #8b5cf6', borderRadius: '12px', padding: '25px', maxWidth: '400px', width: '100%' }}>
-            <h3 style={{ color: 'white', fontSize: '18px', marginBottom: '15px' }}>Confirmar alterações</h3>
-            <p style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '15px' }}>Arquivo: <span style={{ color: '#8b5cf6' }}>{filePath}</span></p>
-            <label style={{ color: '#9ca3af', fontSize: '13px', display: 'block', marginBottom: '8px' }}>Mensagem do commit</label>
-            <input type="text" value={commitMessage} onChange={(e) => setCommitMessage(e.target.value)} style={{ width: '100%', padding: '10px', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: '6px', color: 'white', fontSize: '14px', marginBottom: '20px', boxSizing: 'border-box' }} />
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setShowConfirm(false)} style={{ flex: 1, padding: '12px', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
-              <button onClick={confirmSave} disabled={saving} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', border: 'none', borderRadius: '6px', color: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}>{saving ? 'Salvando...' : 'Confirmar'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 export const Dashboard: React.FC = () => {
   const [token, setToken] = useState('');
   const [repos, setRepos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [connected, setConnected] = useState(false);
-  const [user, setUser] = useState<any>(null);
   const [selectedRepo, setSelectedRepo] = useState<any>(null);
-  const [fileTree, setFileTree] = useState<any[]>([]);
-  const [showFiles, setShowFiles] = useState(false);
-  const [loadingFiles, setLoadingFiles] = useState(false);
-  const [editingFile, setEditingFile] = useState<{ path: string; name: string; content: string; } | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [codeInput, setCodeInput] = useState('');
-  const [showCodeModal, setShowCodeModal] = useState(false);
+  const [files, setFiles] = useState<any[]>([]);
+  const [editingFile, setEditingFile] = useState<any>(null);
+  const [content, setContent] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     const savedToken = localStorage.getItem('github_token');
-    const savedUser = localStorage.getItem('github_user');
-    if (savedToken && savedUser) {
+    if (savedToken) {
       setToken(savedToken);
-      setUser(JSON.parse(savedUser));
       setConnected(true);
-      loadRepositories(savedToken);
+      loadRepos(savedToken);
     }
   }, []);
 
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+  const loadRepos = async (tk: string) => {
+    const res = await fetch('https://api.github.com/user/repos', {
+      headers: { 'Authorization': `token ${tk}` },
+    });
+    const data = await res.json();
+    setRepos(data);
   };
 
-  const loadRepositories = async (githubToken: string) => {
-    try {
-      const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=50', {
-        headers: { 'Authorization': `token ${githubToken}`, 'Accept': 'application/vnd.github.v3+json' },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setRepos(data);
-      }
-    } catch (err) {
-      console.error('Erro ao carregar repositórios:', err);
+  const connect = async () => {
+    const res = await fetch('https://api.github.com/user', {
+      headers: { 'Authorization': `token ${token}` },
+    });
+    if (res.ok) {
+      localStorage.setItem('github_token', token);
+      setConnected(true);
+      loadRepos(token);
+    } else {
+      alert('Token inválido');
     }
   };
 
-  const handleConnect = async () => {
-    if (!token.trim()) { setError('Digite um token'); return; }
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch('https://api.github.com/user', {
-        headers: { 'Authorization': `token ${token.trim()}`, 'Accept': 'application/vnd.github.v3+json' },
-      });
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-        setConnected(true);
-        localStorage.setItem('github_token', token.trim());
-        localStorage.setItem('github_user', JSON.stringify(userData));
-        await loadRepositories(token.trim());
-      } else {
-        setError('Token inválido ou expirado');
-      }
-    } catch (err) {
-      setError('Erro ao conectar com GitHub');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.clear();
-    setConnected(false);
-    setUser(null);
-    setRepos([]);
-    setToken('');
-    setSelectedRepo(null);
-    setFileTree([]);
-    setShowFiles(false);
-    setEditingFile(null);
-  };
-
-  const openRepository = (repo: any) => {
+  const openRepo = async (repo: any) => {
     setSelectedRepo(repo);
-    setShowFiles(false);
-    setFileTree([]);
+    const res = await fetch(`https://api.github.com/repos/${repo.full_name}/git/trees/${repo.default_branch}?recursive=1`, {
+      headers: { 'Authorization': `token ${token}` },
+    });
+    const data = await res.json();
+    const fileList = data.tree.filter((item: any) => item.type === 'blob');
+    setFiles(fileList);
   };
 
-  const loadFileTree = async () => {
-    if (!selectedRepo) return;
-    const githubToken = localStorage.getItem('github_token');
-    if (!githubToken) return;
-    setLoadingFiles(true);
-    try {
-      const response = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/git/trees/${selectedRepo.default_branch}?recursive=1`, {
-        headers: { 'Authorization': `token ${githubToken}`, 'Accept': 'application/vnd.github.v3+json' },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const files = data.tree.filter((item: any) => item.type === 'blob');
-        setFileTree(files);
-        setShowFiles(true);
-      } else {
-        showToast('Erro ao carregar arquivos', 'error');
-      }
-    } catch (err) {
-      showToast('Erro ao carregar arquivos', 'error');
-    } finally {
-      setLoadingFiles(false);
+  const openFile = async (path: string) => {
+    const res = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/contents/${path}`, {
+      headers: { 'Authorization': `token ${token}` },
+    });
+    const data = await res.json();
+    const fileContent = atob(data.content.replace(/\n/g, ''));
+    setEditingFile(path);
+    setContent(fileContent);
+    setMessage(`update: ${path}`);
+  };
+
+  const saveFile = async () => {
+    const getRes = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/contents/${editingFile}`, {
+      headers: { 'Authorization': `token ${token}` },
+    });
+    const getData = await getRes.json();
+    const sha = getData.sha;
+
+    const updateRes = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/contents/${editingFile}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: message,
+        content: btoa(unescape(encodeURIComponent(content))),
+        sha: sha,
+      }),
+    });
+
+    if (updateRes.ok) {
+      alert('Arquivo salvo com sucesso!');
+      setEditingFile(null);
+    } else {
+      const err = await updateRes.json();
+      alert('Erro: ' + err.message);
     }
   };
 
-  const openFile = async (filePath: string) => {
-    if (!selectedRepo) return;
-    const githubToken = localStorage.getItem('github_token');
-    if (!githubToken) return;
-    try {
-      const response = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/contents/${filePath}?ref=${selectedRepo.default_branch}`, {
-        headers: { 'Authorization': `token ${githubToken}`, 'Accept': 'application/vnd.github.v3+json' },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const content = atob(data.content.replace(/\n/g, ''));
-        const fileName = filePath.split('/').pop() || filePath;
-        setEditingFile({ path: filePath, name: fileName, content: content });
-      } else {
-        showToast('Erro ao abrir arquivo', 'error');
-      }
-    } catch (err) {
-      showToast('Erro ao abrir arquivo', 'error');
-    }
-  };
+  if (!connected) {
+    return (
+      <div style={{ padding: '30px', textAlign: 'center' }}>
+        <h1 style={{ color: '#8b5cf6' }}>LORE IA</h1>
+        <p style={{ color: '#9ca3af' }}>Digite seu token do GitHub</p>
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder="ghp_..."
+          style={{ width: '100%', maxWidth: '400px', padding: '12px', marginBottom: '10px', background: '#1a1a2e', border: '1px solid #8b5cf6', borderRadius: '8px', color: 'white' }}
+        />
+        <br />
+        <button
+          onClick={connect}
+          style={{ padding: '12px 30px', background: '#8b5cf6', border: 'none', borderRadius: '8px', color: 'white', fontSize: '16px', fontWeight: 'bold' }}
+        >
+          Conectar
+        </button>
+      </div>
+    );
+  }
 
-  const saveFile = async (filePath: string, content: string, message: string) => {
-    if (!selectedRepo) return;
-    const githubToken = localStorage.getItem('github_token');
-    if (!githubToken) return;
-    try {
-      const getResponse = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/contents/${filePath}?ref=${selectedRepo.default_branch}`, {
-        headers: { 'Authorization': `token ${githubToken}`, 'Accept': 'application/vnd.github.v3+json' },
-      });
-      if (!getResponse.ok) { showToast('Erro ao obter arquivo atual', 'error'); return; }
-      const fileData = await getResponse.json();
-      const sha = fileData.sha;
-      const updateResponse = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/contents/${filePath}`, {
-        method: 'PUT',
-        headers: { 'Authorization': `token ${githubToken}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message, content: btoa(unescape(encodeURIComponent(content))), sha: sha, branch: selectedRepo.default_branch }),
-      });
-      if (updateResponse.ok) {
-        showToast('Arquivo salvo com sucesso!', 'success');
-      } else {
-        const errorData = await updateResponse.json();
-        showToast(`Erro ao salvar: ${errorData.message}`, 'error');
-      }
-    } catch (err) {
-      showToast('Erro ao salvar arquivo', 'error');
-    }
-  };
+  if (editingFile) {
+    return (
+      <div style={{ padding: '15px' }}>
+        <button onClick={() => setEditingFile(null)} style={{ padding: '8px 16px', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: '6px', color: '#9ca3af', marginBottom: '10px' }}>
+          ← Voltar
+        </button>
+        <h2 style={{ color: '#8b5cf6', fontSize: '14px' }}>{editingFile}</h2>
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          style={{ width: '100%', height: '400px', background: '#131320', border: '1px solid #2a2a3e', borderRadius: '8px', color: 'white', fontFamily: 'monospace', fontSize: '14px', padding: '12px', marginBottom: '10px' }}
+        />
+        <input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          style={{ width: '100%', padding: '10px', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: '6px', color: 'white', marginBottom: '10px' }}
+        />
+        <button
+          onClick={saveFile}
+          style={{ width: '100%', padding: '14px', background: '#10b981', border: 'none', borderRadius: '8px', color: 'white', fontSize: '16px', fontWeight: 'bold' }}
+        >
+          SALVAR NO GITHUB
+        </button>
+      </div>
+    );
+  }
 
-  const applyCodeDirect = async () => {
-    if (!codeInput.trim() || !selectedRepo) return;
-    const codeText = codeInput.trim();
-    setCodeInput('');
-    setShowCodeModal(false);
-    try {
-      let parsed;
-      try {
-        parsed = JSON.parse(codeText);
-      } catch (e1) {
-        let cleaned = codeText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const jsonStart = cleaned.indexOf('{');
-        const jsonEnd = cleaned.lastIndexOf('}');
-        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-          cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
-          try { parsed = JSON.parse(cleaned); } catch (e2) { parsed = null; }
-        }
-      }
-      if (parsed && parsed.files && Array.isArray(parsed.files)) {
-        const githubToken = localStorage.getItem('github_token');
-        if (!githubToken) return;
-        for (const file of parsed.files) {
-          const path = file.path;
-          const content = file.newContent || '';
-          const checkResponse = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/contents/${path}?ref=${selectedRepo.default_branch}`, {
-            headers: { 'Authorization': `token ${githubToken}`, 'Accept': 'application/vnd.github.v3+json' },
-          });
-          let sha = null;
-          if (checkResponse.ok) {
-            const fileData = await checkResponse.json();
-            sha = fileData.sha;
-          }
-          const updateBody: any = { message: parsed.summary || `update: ${path}`, content: btoa(unescape(encodeURIComponent(content))), branch: selectedRepo.default_branch };
-          if (sha) { updateBody.sha = sha; }
-          const updateResponse = await fetch(`https://api.github.com/repos/${selectedRepo.full_name}/contents/${path}`, {
-            method: 'PUT',
-            headers: { 'Authorization': `token ${githubToken}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
-            body: JSON.stringify(updateBody),
-          });
-          if (updateResponse.ok) {
-            showToast(`Arquivo ${path} criado/atualizado!`, 'success');
-          } else {
-            const errData = await updateResponse.json();
-            showToast(`Erro em ${path}: ${errData.message}`, 'error');
-          }
-        }
-        if (showFiles) { await loadFileTree(); }
-      } else {
-        showToast('JSON inválido', 'error');
-      }
-    } catch (err) {
-      showToast('Erro ao aplicar código', 'error');
-    }
-  };
+  if (selectedRepo) {
+    return (
+      <div style={{ padding: '15px' }}>
+        <button onClick={() => setSelectedRepo(null)} style={{ padding: '8px 16px', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: '6px', color: '#9ca3af', marginBottom: '10px' }}>
+          ← Voltar
+        </button>
+        <h2 style={{ color: 'white', marginBottom: '15px' }}>{selectedRepo.name}</h2>
+        <div style={{ display: 'grid', gap: '5px' }}>
+          {files.slice(0, 50).map((file: any) => (
+            <button
+              key={file.path}
+              onClick={() => openFile(file.path)}
+              style={{ padding: '12px', background: '#131320', border: '1px solid #2a2a3e', borderRadius: '6px', color: '#9ca3af', textAlign: 'left', fontSize: '13px' }}
+            >
+              📄 {file.path}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <h1 style={{ color: 'white', fontSize: '26px', marginBottom: '20px' }}>Dashboard</h1>
-      {!connected ? (
-        <div style={{ background: '#131320', border: '1px solid #8b5cf6', borderRadius: '12px', padding: '30px', textAlign: 'center', maxWidth: '400px', margin: '0 auto' }}>
-          <Github size={48} color="#8b5cf6" style={{ marginBottom: '20px' }} />
-          <h2 style={{ color: 'white', marginBottom: '10px', fontSize: '20px' }}>Conectar GitHub</h2>
-          <p style={{ color: '#9ca3af', marginBottom: '20px', fontSize: '14px' }}>Digite seu Personal Access Token</p>
-          <input type="password" placeholder="ghp_xxxxxxxxxxxxxxxx" value={token} onChange={(e) => setToken(e.target.value)} style={{ width: '100%', padding: '12px', background: '#1a1a2e', border: '1px solid #8b5cf6', borderRadius: '8px', color: 'white', fontSize: '16px', marginBottom: '15px', boxSizing: 'border-box' }} />
-          <button onClick={handleConnect} disabled={loading} style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', border: 'none', borderRadius: '8px', color: 'white', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>{loading ? 'Conectando...' : 'Conectar'}</button>
-          {error && <p style={{ color: '#ef4444', marginTop: '10px', fontSize: '14px' }}>{error}</p>}
-          <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '20px' }}>Crie seu token em: github.com/settings/tokens</p>
-        </div>
-      ) : selectedRepo ? (
-        <div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
-            <button onClick={() => { setSelectedRepo(null); setShowFiles(false); }} style={{ padding: '8px 16px', background: '#131320', border: '1px solid #2a2a3e', borderRadius: '6px', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
-              <ArrowRight size={16} style={{ transform: 'rotate(180deg)' }} /> Voltar
-            </button>
-            <button onClick={() => setShowCodeModal(true)} style={{ padding: '8px 16px', background: '#10b981', border: 'none', borderRadius: '6px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 'bold' }}>
-              <Code size={16} /> Aplicar Código
-            </button>
-          </div>
-          <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
-              <Github size={28} color="#8b5cf6" style={{ marginRight: '12px' }} />
-              <div>
-                <h2 style={{ color: 'white', fontSize: '20px', margin: 0 }}>{selectedRepo.name}</h2>
-                <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>{selectedRepo.full_name}</p>
-              </div>
-            </div>
-            {!showFiles ? (
-              <button onClick={loadFileTree} disabled={loadingFiles} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', border: 'none', borderRadius: '8px', color: 'white', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer' }}>{loadingFiles ? 'Carregando...' : 'Ver Arquivos do Projeto'}</button>
-            ) : (
-              <div>
-                <h3 style={{ color: 'white', fontSize: '16px', marginBottom: '15px' }}>Arquivos ({fileTree.length})</h3>
-                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                  {fileTree.slice(0, 100).map((file: any) => (
-                    <button key={file.path} onClick={() => openFile(file.path)} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '10px', background: 'transparent', border: 'none', borderBottom: '1px solid #1a1a2e', cursor: 'pointer', textAlign: 'left' }}>
-                      <FileCode size={14} color="#8b5cf6" style={{ marginRight: '10px', flexShrink: 0 }} />
-                      <span style={{ color: '#9ca3af', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.path}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', background: '#131320', padding: '15px', borderRadius: '10px', border: '1px solid #2a2a3e', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
-              <h2 style={{ color: 'white', fontSize: '18px', margin: 0 }}>Bem-vindo, {user?.login}</h2>
-              <p style={{ color: '#9ca3af', fontSize: '14px', margin: 0 }}>{repos.length} repositórios encontrados</p>
-            </div>
-            <button onClick={handleLogout} style={{ padding: '8px 16px', background: '#ef4444', border: 'none', borderRadius: '6px', color: 'white', cursor: 'pointer', fontSize: '14px' }}>Sair</button>
-          </div>
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {repos.map((repo) => (
-              <div key={repo.id} style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '15px', cursor: 'pointer' }} onClick={() => openRepository(repo)}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                    <Github size={18} color="#8b5cf6" style={{ marginRight: '10px', flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                      <h3 style={{ color: 'white', fontSize: '16px', margin: 0 }}>{repo.name}</h3>
-                      <p style={{ color: '#9ca3af', fontSize: '12px', margin: 0 }}>{repo.description || 'Sem descrição'}</p>
-                    </div>
-                  </div>
-                  <ArrowRight size={18} color="#8b5cf6" style={{ flexShrink: 0 }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {showCodeModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '15px' }}>
-          <div style={{ background: '#131320', border: '1px solid #8b5cf6', borderRadius: '12px', padding: '20px', width: '100%', maxWidth: '500px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{ color: '#8b5cf6', fontSize: '16px', margin: 0 }}>Aplicar Código JSON</h3>
-              <button onClick={() => setShowCodeModal(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '20px' }}>✕</button>
-            </div>
-            <textarea value={codeInput} onChange={(e) => setCodeInput(e.target.value)} placeholder='{"summary":"Mudar fundo","files":[{"path":"src/index.css","action":"modify","originalContent":"","newContent":"body { background: blue; }"}]}' rows={10} style={{ width: '100%', padding: '12px', background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: '8px', color: 'white', fontSize: '12px', fontFamily: 'monospace', boxSizing: 'border-box', marginBottom: '15px', resize: 'vertical' }} />
-            <button onClick={applyCodeDirect} disabled={!codeInput.trim()} style={{ width: '100%', padding: '14px', background: !codeInput.trim() ? '#4b5563' : '#10b981', border: 'none', borderRadius: '8px', color: 'white', fontSize: '15px', fontWeight: 'bold', cursor: !codeInput.trim() ? 'not-allowed' : 'pointer' }}>APLICAR AGORA</button>
-          </div>
-        </div>
-      )}
-      {editingFile && (
-        <FileEditor filePath={editingFile.path} fileName={editingFile.name} content={editingFile.content} onClose={() => setEditingFile(null)} onSave={saveFile} />
-      )}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: '20px', right: '20px', background: toast.type === 'success' ? '#10b981' : '#ef4444', color: 'white', padding: '12px 20px', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', zIndex: 3000, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
-          {toast.type === 'success' ? <Check size={18} /> : <X size={18} />} {toast.message}
-        </div>
-      )}
+    <div style={{ padding: '15px' }}>
+      <h1 style={{ color: '#8b5cf6', marginBottom: '15px' }}>Seus Repositórios</h1>
+      <div style={{ display: 'grid', gap: '10px' }}>
+        {repos.map((repo: any) => (
+          <button
+            key={repo.id}
+            onClick={() => openRepo(repo)}
+            style={{ padding: '15px', background: '#131320', border: '1px solid #2a2a3e', borderRadius: '8px', color: 'white', textAlign: 'left', fontSize: '16px' }}
+          >
+            {repo.name}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => { localStorage.clear(); setConnected(false); setToken(''); }}
+        style={{ marginTop: '20px', padding: '10px 20px', background: '#ef4444', border: 'none', borderRadius: '6px', color: 'white' }}
+      >
+        Sair
+      </button>
     </div>
   );
 };
