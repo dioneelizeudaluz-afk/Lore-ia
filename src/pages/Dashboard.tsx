@@ -12,7 +12,8 @@ import {
   Sparkles,
   Send,
   Bot,
-  Loader2
+  Loader2,
+  Code
 } from 'lucide-react';
 
 const FileEditor: React.FC<{
@@ -242,17 +243,7 @@ export const Dashboard: React.FC = () => {
   } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiMessages, setAiMessages] = useState<any[]>([
-    {
-      role: 'assistant',
-      content: 'Olá! Sou o LORE IA. Pode me pedir qualquer coisa em linguagem simples.',
-    },
-  ]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState('');
-
+  const [codeInput, setCodeInput] = useState('');
   const [modificationPlan, setModificationPlan] = useState<any>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [applyingChanges, setApplyingChanges] = useState(false);
@@ -351,13 +342,7 @@ export const Dashboard: React.FC = () => {
     setFileTree([]);
     setShowFiles(false);
     setEditingFile(null);
-    setAiMessages([
-      {
-        role: 'assistant',
-        content: 'Olá! Sou o LORE IA. Pode me pedir qualquer coisa em linguagem simples.',
-      },
-    ]);
-    setAiOpen(false);
+    setCodeInput('');
     setModificationPlan(null);
     setShowDiff(false);
     setShowDeployProgress(false);
@@ -368,7 +353,7 @@ export const Dashboard: React.FC = () => {
     setSelectedRepo(repo);
     setShowFiles(false);
     setFileTree([]);
-    setAiOpen(false);
+    setCodeInput('');
     setModificationPlan(null);
     setShowDiff(false);
   };
@@ -496,210 +481,45 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const analyzeProject = async () => {
-    if (!selectedRepo) return null;
+  const applyManualCode = async () => {
+    if (!codeInput.trim() || applyingChanges || !selectedRepo) return;
     
-    const githubToken = localStorage.getItem('github_token');
-    if (!githubToken) return null;
-
-    try {
-      const response = await fetch('/api/ai/analyze-project', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          repoFullName: selectedRepo.full_name,
-          branch: selectedRepo.default_branch,
-          githubToken: githubToken,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.context;
-      }
-    } catch (err) {
-      console.error('Erro ao analisar projeto:', err);
-    }
-    return null;
-  };
-
-  const sendAIMessage = async () => {
-    if (!aiPrompt.trim() || aiLoading) return;
+    const codeText = codeInput.trim();
+    setCodeInput('');
     
-    const userMessage = aiPrompt.trim();
-    setAiPrompt('');
-    setAiMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setAiLoading(true);
-    setAiError('');
-
     try {
-      const context = await analyzeProject();
+      let parsed;
       
-      const response = await fetch('/api/ai/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: userMessage,
-          context: context || { framework: 'unknown', structure: [] },
-          conversation: aiMessages,
-          mode: 'analyze',
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.response) {
-        setAiMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
-      } else {
-        setAiMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: data.error || 'Erro ao contactar AI Engine.' 
-        }]);
-      }
-    } catch (err) {
-      setAiMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Erro de conexão.' 
-      }]);
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const generateModification = async () => {
-    if (!aiPrompt.trim() || aiLoading || !selectedRepo) return;
-    
-    const userMessage = aiPrompt.trim();
-    setAiPrompt('');
-    setAiMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setAiLoading(true);
-    setAiError('');
-
-    try {
-      const context = await analyzeProject();
-      
-      const githubToken = localStorage.getItem('github_token');
-      const fileContents: Record<string, string> = {};
-      
-      if (context) {
-        const filesToRead = [
-          ...(context.pages || []).slice(0, 3),
-          ...(context.components || []).slice(0, 5),
-          ...(context.styles || []).slice(0, 3),
-        ];
-
-        for (const filePath of filesToRead) {
+      try {
+        parsed = JSON.parse(codeText);
+      } catch (e1) {
+        let cleaned = codeText.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const jsonStart = cleaned.indexOf('{');
+        const jsonEnd = cleaned.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
           try {
-            const response = await fetch(
-              `https://api.github.com/repos/${selectedRepo.full_name}/contents/${filePath}?ref=${selectedRepo.default_branch}`,
-              {
-                headers: {
-                  'Authorization': `token ${githubToken}`,
-                  'Accept': 'application/vnd.github.v3+json',
-                },
-              }
-            );
-            if (response.ok) {
-              const data = await response.json();
-              if (data.content) {
-                fileContents[filePath] = atob(data.content.replace(/\n/g, ''));
-              }
-            }
-          } catch (err) {
-            // Skip
+            parsed = JSON.parse(cleaned);
+          } catch (e2) {
+            parsed = null;
           }
         }
       }
-
-      const response = await fetch('/api/ai/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: userMessage,
-          context: { ...(context || {}), fileContents },
-          conversation: aiMessages,
-          mode: 'modify',
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.response) {
-        const rawResponse = data.response;
-        
-        let parsed = null;
-        
-        try {
-          parsed = JSON.parse(rawResponse);
-        } catch (e1) {
-          let cleaned = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-          
-          const jsonStart = cleaned.indexOf('{');
-          const jsonEnd = cleaned.lastIndexOf('}');
-          
-          if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-            cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
-            try {
-              parsed = JSON.parse(cleaned);
-            } catch (e2) {
-              parsed = null;
-            }
-          }
-        }
-        
-        if (parsed && parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
-          setModificationPlan(parsed);
-          setShowDiff(true);
-          setAiMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: `Plano gerado! ${parsed.summary || 'Alterações'}\n\n${parsed.files.length} arquivo(s) serão alterados.` 
-          }]);
-        } else {
-          setAiMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: rawResponse 
-          }]);
-        }
+      
+      if (parsed && parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
+        setModificationPlan(parsed);
+        setShowDiff(true);
       } else {
-        setAiMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: data.error || 'Erro ao contactar AI Engine.' 
-        }]);
+        showToast('JSON inválido. Verifique o formato.', 'error');
       }
     } catch (err) {
-      setAiMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Erro de conexão. Tente novamente.' 
-      }]);
-    } finally {
-      setAiLoading(false);
+      showToast('Erro ao processar código.', 'error');
     }
   };
 
   const generateCommitMessage = (plan: any): string => {
     if (!plan) return 'Update project files';
-    
     const summary = plan.summary || '';
-    
-    if (summary.toLowerCase().includes('fix') || summary.toLowerCase().includes('corrig')) {
-      return `fix: ${summary}`;
-    }
-    if (summary.toLowerCase().includes('add') || summary.toLowerCase().includes('criar')) {
-      return `feat: ${summary}`;
-    }
-    if (summary.toLowerCase().includes('update') || summary.toLowerCase().includes('atualizar')) {
-      return `update: ${summary}`;
-    }
-    if (summary.toLowerCase().includes('remove') || summary.toLowerCase().includes('remover')) {
-      return `remove: ${summary}`;
-    }
-    
     return `update: ${summary || 'project files'}`;
   };
 
@@ -768,39 +588,15 @@ export const Dashboard: React.FC = () => {
         i === 0 ? { ...s, status: 'success', message: 'Alterações aplicadas com sucesso' } :
         i === 1 ? { ...s, status: 'success', message: `Commit: ${commitData.commitSha?.substring(0, 7) || 'criado'}` } :
         i === 2 ? { ...s, status: 'success', message: 'Push enviado para GitHub' } :
-        i === 3 ? { ...s, status: 'loading', message: 'Aguardando deploy automático...' } : s
+        i === 3 ? { ...s, status: 'success', message: 'Deploy acionado' } : s
       ));
 
-      const checkResponse = await fetch('/api/github/check-deploy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          repoFullName: selectedRepo.full_name,
-          githubToken: githubToken,
-        }),
-      });
-
-      const checkData = await checkResponse.json();
-
-      if (checkResponse.ok && checkData.success) {
-        setDeployStatus(prev => prev.map((s, i) => 
-          i === 3 ? { ...s, status: 'success', message: 'Deploy acionado. O serviço de deploy conectado ao GitHub vai publicar automaticamente.' } : s
-        ));
-        showToast('Push enviado. Deploy automático acionado!', 'success');
-      } else {
-        setDeployStatus(prev => prev.map((s, i) => 
-          i === 3 ? { ...s, status: 'success', message: 'Push confirmado. Deploy será acionado pelo GitHub.' } : s
-        ));
-        showToast('Push enviado. Deploy será acionado pelo GitHub.', 'success');
-      }
+      showToast('Alterações enviadas com sucesso!', 'success');
 
       if (showFiles) {
         await loadFileTree();
       }
     } catch (err) {
-      console.error('Erro no commit e push:', err);
       setDeployStatus(prev => prev.map((s, i) => 
         s.status === 'loading' ? { ...s, status: 'error', message: 'Erro na operação' } : s
       ));
@@ -892,12 +688,6 @@ export const Dashboard: React.FC = () => {
                   </span>
                 </div>
 
-                {file.action === 'delete' && (
-                  <p style={{ color: '#ef4444', fontSize: '13px', margin: '10px 0' }}>
-                    ⚠️ Esta alteração irá excluir este arquivo permanentemente!
-                  </p>
-                )}
-
                 {file.action !== 'delete' && (
                   <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
                     <div>
@@ -914,7 +704,6 @@ export const Dashboard: React.FC = () => {
                         wordBreak: 'break-all',
                       }}>
                         {file.newContent?.substring(0, 1000)}
-                        {(file.newContent?.length || 0) > 1000 ? '...' : ''}
                       </pre>
                     </div>
                   </div>
@@ -1232,7 +1021,7 @@ export const Dashboard: React.FC = () => {
               onClick={() => {
                 setSelectedRepo(null);
                 setShowFiles(false);
-                setAiOpen(false);
+                setCodeInput('');
                 setModificationPlan(null);
                 setShowDiff(false);
               }}
@@ -1252,370 +1041,17 @@ export const Dashboard: React.FC = () => {
               <ArrowRight size={16} style={{ transform: 'rotate(180deg)' }} />
               Voltar
             </button>
-
-            <button
-              onClick={() => setAiOpen(!aiOpen)}
-              style={{
-                padding: '8px 16px',
-                background: aiOpen ? '#8b5cf6' : '#131320',
-                border: '1px solid #8b5cf6',
-                borderRadius: '6px',
-                color: aiOpen ? 'white' : '#8b5cf6',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '14px',
-              }}
-            >
-              <Sparkles size={16} />
-              AI Assistant
-            </button>
           </div>
 
-          {aiOpen && (
-            <div style={{
-              background: '#131320',
-              border: '1px solid #8b5cf6',
-              borderRadius: '10px',
-              padding: '15px',
-              marginBottom: '15px',
-            }}>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                marginBottom: '15px',
-                borderBottom: '1px solid #2a2a3e',
-                paddingBottom: '10px',
-              }}>
-                <Bot size={20} color="#8b5cf6" style={{ marginRight: '10px' }} />
-                <h3 style={{ color: '#8b5cf6', fontSize: '16px', margin: 0 }}>
-                  LORE IA Assistant
-                </h3>
-              </div>
-
-              <div style={{ 
-                maxHeight: '300px', 
-                overflowY: 'auto', 
-                marginBottom: '15px',
-              }}>
-                {aiMessages.map((msg, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'flex',
-                      justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                      marginBottom: '10px',
-                    }}
-                  >
-                    <div style={{
-                      maxWidth: '85%',
-                      background: msg.role === 'user' ? '#8b5cf6' : '#1a1a2e',
-                      border: '1px solid ' + (msg.role === 'user' ? '#8b5cf6' : '#2a2a3e'),
-                      borderRadius: '10px',
-                      padding: '12px',
-                    }}>
-                      <p style={{
-                        color: 'white',
-                        fontSize: '13px',
-                        margin: 0,
-                        whiteSpace: 'pre-wrap',
-                        lineHeight: '1.5',
-                      }}>
-                        {msg.content}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                
-                {aiLoading && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '10px' }}>
-                    <div style={{
-                      background: '#1a1a2e',
-                      border: '1px solid #2a2a3e',
-                      borderRadius: '10px',
-                      padding: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}>
-                      <Loader2 size={16} color="#8b5cf6" style={{ animation: 'spin 1s linear infinite' }} />
-                      <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>
-                        LORE IA está pensando...
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                <input
-                  type="text"
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendAIMessage();
-                    }
-                  }}
-                  placeholder="Digite o que você quer..."
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    background: '#1a1a2e',
-                    border: '1px solid #2a2a3e',
-                    borderRadius: '8px',
-                    color: 'white',
-                    fontSize: '14px',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <button
-                  onClick={sendAIMessage}
-                  disabled={aiLoading || !aiPrompt.trim()}
-                  style={{
-                    padding: '12px 15px',
-                    background: aiLoading || !aiPrompt.trim() ? '#4b5563' : '#1a1a2e',
-                    border: '1px solid #2a2a3e',
-                    borderRadius: '8px',
-                    color: 'white',
-                    cursor: aiLoading || !aiPrompt.trim() ? 'not-allowed' : 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Send size={16} />
-                </button>
-              </div>
-
-              <button
-                onClick={generateModification}
-                disabled={aiLoading || !aiPrompt.trim()}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  background: aiLoading || !aiPrompt.trim() ? '#4b5563' : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: 'white',
-                  cursor: aiLoading || !aiPrompt.trim() ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  fontWeight: 'bold',
-                }}
-              >
-                {aiLoading ? 'GERANDO...' : 'GERAR ALTERAÇÕES'}
-              </button>
-
-              {aiError && (
-                <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '10px' }}>
-                  {aiError}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px' }}>
-              <Github size={28} color="#8b5cf6" style={{ marginRight: '12px' }} />
-              <div>
-                <h2 style={{ color: 'white', fontSize: '20px', margin: 0 }}>{selectedRepo.name}</h2>
-                <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>{selectedRepo.full_name}</p>
-              </div>
-            </div>
-
-            {!showFiles ? (
-              <button
-                onClick={loadFileTree}
-                disabled={loadingFiles}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: 'white',
-                  fontSize: '15px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                }}
-              >
-                {loadingFiles ? 'Carregando...' : 'Ver Arquivos do Projeto'}
-              </button>
-            ) : (
-              <div>
-                <h3 style={{ color: 'white', fontSize: '16px', marginBottom: '15px' }}>
-                  Arquivos ({fileTree.length})
-                </h3>
-                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                  {fileTree.slice(0, 100).map((file: any) => (
-                    <button
-                      key={file.path}
-                      onClick={() => openFile(file.path)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        width: '100%',
-                        padding: '10px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: '1px solid #1a1a2e',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                      }}
-                    >
-                      <FileCode size={14} color="#8b5cf6" style={{ marginRight: '10px', flexShrink: 0 }} />
-                      <span style={{ color: '#9ca3af', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {file.path}
-                      </span>
-                    </button>
-                  ))}
-                  {fileTree.length > 100 && (
-                    <p style={{ color: '#6b7280', fontSize: '13px', padding: '10px', textAlign: 'center' }}>
-                      ... e mais {fileTree.length - 100} arquivos
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div>
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            marginBottom: '15px',
+          {/* Campo de código manual */}
+          <div style={{
             background: '#131320',
-            padding: '15px',
+            border: '1px solid #8b5cf6',
             borderRadius: '10px',
-            border: '1px solid #2a2a3e',
-            flexWrap: 'wrap',
-            gap: '10px',
+            padding: '15px',
+            marginBottom: '15px',
           }}>
-            <div>
-              <h2 style={{ color: 'white', fontSize: '18px', margin: 0 }}>
-                Bem-vindo, {user?.login}
-              </h2>
-              <p style={{ color: '#9ca3af', fontSize: '14px', margin: 0 }}>
-                {repos.length} repositórios encontrados
-              </p>
-            </div>
-            <button
-              onClick={handleLogout}
-              style={{
-                padding: '8px 16px',
-                background: '#ef4444',
-                border: 'none',
-                borderRadius: '6px',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '14px',
-              }}
-            >
-              Sair
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '15px' }}>
-            <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '15px' }}>
-              <FolderOpen size={22} color="#8b5cf6" style={{ marginBottom: '8px' }} />
-              <h3 style={{ color: 'white', fontSize: '22px', margin: '0 0 5px' }}>{repos.length}</h3>
-              <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>Projetos</p>
-            </div>
-            <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '15px' }}>
-              <GitCommit size={22} color="#8b5cf6" style={{ marginBottom: '8px' }} />
-              <h3 style={{ color: 'white', fontSize: '22px', margin: '0 0 5px' }}>0</h3>
-              <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>Commits</p>
-            </div>
-            <div style={{ background: '#131320', border: '1px solid #2a2a3e', borderRadius: '10px', padding: '15px' }}>
-              <Zap size={22} color="#8b5cf6" style={{ marginBottom: '8px' }} />
-              <h3 style={{ color: 'white', fontSize: '22px', margin: '0 0 5px' }}>0</h3>
-              <p style={{ color: '#9ca3af', fontSize: '13px', margin: 0 }}>Alterações IA</p>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {repos.map((repo) => (
-              <div
-                key={repo.id}
-                style={{
-                  background: '#131320',
-                  border: '1px solid #2a2a3e',
-                  borderRadius: '10px',
-                  padding: '15px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onClick={() => openRepository(repo)}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                    <Github size={18} color="#8b5cf6" style={{ marginRight: '10px', flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                      <h3 style={{ color: 'white', fontSize: '16px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {repo.name}
-                      </h3>
-                      <p style={{ color: '#9ca3af', fontSize: '12px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {repo.description || 'Sem descrição'}
-                      </p>
-                    </div>
-                  </div>
-                  <ArrowRight size={18} color="#8b5cf6" style={{ flexShrink: 0 }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
-                  <span style={{ color: '#6b7280', fontSize: '12px' }}>
-                    {repo.language || 'Unknown'}
-                  </span>
-                  <span style={{ color: '#6b7280', fontSize: '12px' }}>
-                    {new Date(repo.updated_at).toLocaleDateString('pt-BR')}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {editingFile && (
-        <FileEditor
-          filePath={editingFile.path}
-          fileName={editingFile.name}
-          content={editingFile.content}
-          repoName={selectedRepo?.name || ''}
-          branch={selectedRepo?.default_branch || 'main'}
-          onClose={() => setEditingFile(null)}
-          onSave={saveFile}
-        />
-      )}
-
-      {renderDiff()}
-      {renderCommitModal()}
-      {renderDeployProgress()}
-
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          background: toast.type === 'success' ? '#10b981' : '#ef4444',
-          color: 'white',
-          padding: '12px 20px',
-          borderRadius: '8px',
-          fontSize: '14px',
-          fontWeight: 'bold',
-          zIndex: 3000,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-        }}>
-          {toast.type === 'success' ? <Check size={18} /> : <X size={18} />}
-          {toast.message}
-        </div>
-      )}
-    </div>
-  );
-};
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              margin
