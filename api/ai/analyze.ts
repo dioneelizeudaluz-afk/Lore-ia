@@ -11,11 +11,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Prompt é obrigatório' });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({ 
-      error: 'OpenRouter não configurado.' 
+      error: 'Gemini não configurado. Adicione GEMINI_API_KEY na Vercel.' 
     });
   }
 
@@ -23,24 +23,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let systemPrompt = '';
 
     if (mode === 'modify') {
-      systemPrompt = `Você é um programador. Crie código para o pedido.
-Responda APENAS JSON: {"summary":"breve","files":[{"path":"src/arquivo.tsx","action":"create","originalContent":"","newContent":"código"}]}
-CONTEXTO: ${JSON.stringify(context).substring(0, 1500)}`;
+      systemPrompt = 'Você é um programador. Crie código para: ' + prompt + '\n\nResponda APENAS JSON: {"summary":"breve","files":[{"path":"src/arquivo.tsx","action":"create","originalContent":"","newContent":"código"}]}\n\nCONTEXTO: ' + JSON.stringify(context).substring(0, 1500);
     } else {
-      systemPrompt = `Responda em português.
-CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
+      systemPrompt = 'Responda em português: ' + prompt + '\n\nCONTEXTO: ' + JSON.stringify(context).substring(0, 1000);
     }
 
-    const fullPrompt = systemPrompt + '\n\nPEDIDO:\n' + prompt;
-
-    // Modelos gratuitos CONFIRMADOS do OpenRouter
+    // Lista de modelos gratuitos do Gemini
     const models = [
-      'google/gemini-2.0-flash-exp:free',
-      'meta-llama/llama-3.2-3b-instruct:free',
-      'mistralai/mistral-7b-instruct:free',
-      'openchat/openchat-7b:free',
-      'qwen/qwen-2.5-7b-instruct:free',
-      'deepseek/deepseek-chat:free',
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-pro',
+      'gemini-pro',
     ];
 
     let aiResponse = '';
@@ -48,33 +41,42 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
 
     for (const model of models) {
       try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-            'HTTP-Referer': 'https://lore-ia.vercel.app',
-            'X-Title': 'Lore-IA',
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [{ role: 'user', content: fullPrompt }],
-            max_tokens: 8000,
-            temperature: 0.2,
-          }),
-        });
+        const response = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: systemPrompt }] }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 8000,
+              },
+            }),
+          }
+        );
 
         if (response.ok) {
           const data = await response.json();
-          aiResponse = data.choices?.[0]?.message?.content || '';
-          if (aiResponse.trim().length > 0) break;
+          aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (aiResponse.trim().length > 0) {
+            break;
+          }
         } else {
           const errorData = await response.json();
           lastError = errorData.error?.message || 'Erro';
+          
+          // Se for limite, aguarda e tenta próximo modelo
+          if (lastError.includes('Quota') || lastError.includes('quota') || lastError.includes('limit')) {
+            continue;
+          }
         }
       } catch (err) {
         lastError = 'Erro de conexão';
       }
+      
+      // Pequena pausa entre tentativas
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
 
     if (aiResponse.trim().length > 0) {
@@ -82,10 +84,12 @@ CONTEXTO: ${JSON.stringify(context).substring(0, 1000)}`;
     }
 
     return res.status(500).json({ 
-      error: 'Todos os modelos falharam. Último erro: ' + lastError.substring(0, 80)
+      error: 'Gemini limitado no momento. Aguarde 1 minuto e tente novamente.' 
     });
 
   } catch (error) {
-    return res.status(500).json({ error: 'Erro interno.' });
+    return res.status(500).json({ 
+      error: 'Erro interno. Tente novamente.' 
+    });
   }
-              }
+  }
