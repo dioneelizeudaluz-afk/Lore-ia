@@ -1,24 +1,10 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { LayoutDashboard, FolderOpen, GitBranch, History, Settings, Sparkles, Key, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FolderOpen, GitBranch, History, Settings, Menu, X } from 'lucide-react';
 import { Dashboard } from './pages/Dashboard';
-import { Projects } from './pages/Projects';
-import { Branches } from './pages/Branches';
-import { SettingsPage } from './pages/SettingsPage';
-import { HistoryPage } from './pages/HistoryPage';
 
 function App() {
   const [menuOpen, setMenuOpen] = useState(false);
-
-  const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: FolderOpen, label: 'Projetos', path: '/projects' },
-    { icon: GitBranch, label: 'Branches', path: '/branches' },
-    { icon: History, label: 'Histórico', path: '/history' },
-    { icon: Key, label: 'API Key', path: '/settings' },
-    { icon: Sparkles, label: 'IA Engine', path: '/settings' },
-    { icon: Settings, label: 'Configurações', path: '/settings' },
-  ];
 
   return (
     <Router>
@@ -67,25 +53,18 @@ function App() {
             paddingTop: '60px',
           }}>
             <nav>
-              {menuItems.map((item) => (
-                <Link
-                  key={item.label}
-                  to={item.path}
-                  onClick={() => setMenuOpen(false)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '15px 20px',
-                    color: '#9ca3af',
-                    textDecoration: 'none',
-                    fontSize: '16px',
-                    borderBottom: '1px solid #1a1a2e',
-                  }}
-                >
-                  <item.icon size={20} style={{ marginRight: '15px', color: '#8b5cf6' }} />
-                  {item.label}
-                </Link>
-              ))}
+              <Link to="/" onClick={() => setMenuOpen(false)} style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '15px 20px',
+                color: '#9ca3af',
+                textDecoration: 'none',
+                fontSize: '16px',
+                borderBottom: '1px solid #1a1a2e',
+              }}>
+                <LayoutDashboard size={20} style={{ marginRight: '15px', color: '#8b5cf6' }} />
+                Dashboard
+              </Link>
             </nav>
           </div>
         )}
@@ -108,10 +87,6 @@ function App() {
         <main style={{ padding: '15px' }}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/branches" element={<Branches />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>
       </div>
